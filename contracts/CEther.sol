@@ -24,12 +24,8 @@ contract CEther is CToken {
                 string memory name_,
                 string memory symbol_,
                 uint8 decimals_,
-                address payable admin_) public {
-        // Creator of the contract is admin during initialization
-        admin = msg.sender;
-
-        initialize(comptroller_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_);
-
+                address payable admin_) public 
+                CToken(comptroller_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_) {
         // Set the proper admin now that initialization is done
         admin = admin_;
     }
