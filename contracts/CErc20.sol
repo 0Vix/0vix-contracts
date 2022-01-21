@@ -32,7 +32,6 @@ contract CErc20 is CToken, CErc20Interface {
                 uint8 decimals_) public
     CToken(comptroller_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_) {
         // Set underlying
-        admin = msg.sender;
         underlying = underlying_;
         EIP20Interface(underlying).totalSupply(); // Sanity check the underlying
     }
