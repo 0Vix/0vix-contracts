@@ -1,17 +1,13 @@
-pragma solidity ^0.5.16;
+pragma solidity 0.5.17;
 
-import "./CToken.sol";
-
-interface CompLike {
-  function delegate(address delegatee) external;
-}
+import "./OToken.sol";
 
 /**
- * @title Compound's CErc20 Contract
- * @notice CTokens which wrap an EIP-20 underlying
- * @author Compound
+ * @title 0VIX's OErc20 Contract
+ * @notice OTokens which wrap an EIP-20 underlying
+ * @author 0VIX
  */
-contract CErc20 is CToken, CErc20Interface {
+contract OErc20 is OToken, OErc20Interface {
     /**
      * @notice Initialize the new money market
      * @param underlying_ The address of the underlying asset
@@ -22,24 +18,26 @@ contract CErc20 is CToken, CErc20Interface {
      * @param symbol_ ERC-20 symbol of this token
      * @param decimals_ ERC-20 decimal precision of this token
      */
-
     constructor(address underlying_,
-                ComptrollerInterface comptroller_,
-                InterestRateModel interestRateModel_,
-                uint initialExchangeRateMantissa_,
-                string memory name_,
-                string memory symbol_,
-                uint8 decimals_) public
-    CToken(comptroller_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_) {
-        // Set underlying
+                        ComptrollerInterface comptroller_,
+                        InterestRateModel interestRateModel_,
+                        uint initialExchangeRateMantissa_,
+                        string memory name_,
+                        string memory symbol_,
+                        uint8 decimals_) public {
+        // OToken initialize does the bulk of the work
+        admin = msg.sender;
+        super.initialize(comptroller_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_);
+
+        // Set underlying and sanity check it
         underlying = underlying_;
-        EIP20Interface(underlying).totalSupply(); // Sanity check the underlying
+        EIP20Interface(underlying).totalSupply();
     }
 
     /*** User Interface ***/
 
     /**
-     * @notice Sender supplies assets into the market and receives cTokens in exchange
+     * @notice Sender supplies assets into the market and receives oTokens in exchange
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
      * @param mintAmount The amount of the underlying asset to supply
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
@@ -50,9 +48,9 @@ contract CErc20 is CToken, CErc20Interface {
     }
 
     /**
-     * @notice Sender redeems cTokens in exchange for the underlying asset
+     * @notice Sender redeems oTokens in exchange for the underlying asset
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
-     * @param redeemTokens The number of cTokens to redeem into underlying
+     * @param redeemTokens The number of oTokens to redeem into underlying
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function redeem(uint redeemTokens) external returns (uint) {
@@ -60,7 +58,7 @@ contract CErc20 is CToken, CErc20Interface {
     }
 
     /**
-     * @notice Sender redeems cTokens in exchange for a specified amount of underlying asset
+     * @notice Sender redeems oTokens in exchange for a specified amount of underlying asset
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
      * @param redeemAmount The amount of underlying to redeem
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
@@ -102,13 +100,13 @@ contract CErc20 is CToken, CErc20Interface {
     /**
      * @notice The sender liquidates the borrowers collateral.
      *  The collateral seized is transferred to the liquidator.
-     * @param borrower The borrower of this cToken to be liquidated
+     * @param borrower The borrower of this oToken to be liquidated
      * @param repayAmount The amount of the underlying borrowed asset to repay
-     * @param cTokenCollateral The market in which to seize collateral from the borrower
+     * @param oTokenCollateral The market in which to seize collateral from the borrower
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function liquidateBorrow(address borrower, uint repayAmount, CTokenInterface cTokenCollateral) external returns (uint) {
-        (uint err,) = liquidateBorrowInternal(borrower, repayAmount, cTokenCollateral);
+    function liquidateBorrow(address borrower, uint repayAmount, OTokenInterface oTokenCollateral) external returns (uint) {
+        (uint err,) = liquidateBorrowInternal(borrower, repayAmount, oTokenCollateral);
         return err;
     }
 
@@ -117,7 +115,7 @@ contract CErc20 is CToken, CErc20Interface {
      * @param token The address of the ERC-20 token to sweep
      */
     function sweepToken(EIP20NonStandardInterface token) external {
-    	require(address(token) != underlying, "CErc20::sweepToken: can not sweep underlying token");
+    	require(address(token) != underlying, "OErc20::sweepToken: can not sweep underlying token");
     	uint256 balance = token.balanceOf(address(this));
     	token.transfer(admin, balance);
     }
@@ -198,7 +196,7 @@ contract CErc20 is CToken, CErc20Interface {
                 case 0 {                      // This is a non-standard ERC-20
                     success := not(0)          // set success to true
                 }
-                case 32 {                     // This is a compliant ERC-20
+                case 32 {                     // This is a complaint ERC-20
                     returndatacopy(0, 0, 32)
                     success := mload(0)        // Set `success = returndata` of external call
                 }
@@ -207,15 +205,5 @@ contract CErc20 is CToken, CErc20Interface {
                 }
         }
         require(success, "TOKEN_TRANSFER_OUT_FAILED");
-    }
-
-    /**
-    * @notice Admin call to delegate the votes of the COMP-like underlying
-    * @param compLikeDelegatee The address to delegate votes to
-    * @dev CTokens whose underlying are not CompLike should revert here
-    */
-    function _delegateCompLikeTo(address compLikeDelegatee) external {
-        require(msg.sender == admin, "only the admin may set the comp-like delegate");
-        CompLike(underlying).delegate(compLikeDelegatee);
     }
 }

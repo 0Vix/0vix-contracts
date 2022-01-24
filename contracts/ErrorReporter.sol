@@ -1,4 +1,4 @@
-pragma solidity ^0.5.16;
+pragma solidity 0.5.17;
 
 contract ComptrollerErrorReporter {
     enum Error {
@@ -178,7 +178,10 @@ contract TokenErrorReporter {
         TRANSFER_TOO_MUCH,
         ADD_RESERVES_ACCRUE_INTEREST_FAILED,
         ADD_RESERVES_FRESH_CHECK,
-        ADD_RESERVES_TRANSFER_IN_NOT_POSSIBLE
+        ADD_RESERVES_TRANSFER_IN_NOT_POSSIBLE,
+        SET_PROTOCOL_SEIZE_SHARE_ACCRUE_INTEREST_FAILED,
+        SET_PROTOCOL_SEIZE_SHARE_OWNER_CHECK,
+        SET_PROTOCOL_SEIZE_SHARE_FRESH_CHECK
     }
 
     /**

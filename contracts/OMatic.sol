@@ -1,15 +1,15 @@
-pragma solidity ^0.5.16;
+pragma solidity 0.5.17;
 
-import "./CToken.sol";
+import "./OToken.sol";
 
 /**
- * @title Compound's CEther Contract
- * @notice CToken which wraps Ether
- * @author Compound
+ * @title 0VIX's OMatic Contract
+ * @notice OToken which wraps Matic
+ * @author 0VIX
  */
-contract CEther is CToken {
+contract OMatic is OToken {
     /**
-     * @notice Construct a new CEther money market
+     * @notice Construct a new OMatic money market
      * @param comptroller_ The address of the Comptroller
      * @param interestRateModel_ The address of the interest rate model
      * @param initialExchangeRateMantissa_ The initial exchange rate, scaled by 1e18
@@ -24,8 +24,12 @@ contract CEther is CToken {
                 string memory name_,
                 string memory symbol_,
                 uint8 decimals_,
-                address payable admin_) public 
-                CToken(comptroller_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_) {
+                address payable admin_) public {
+        // Creator of the contract is admin during initialization
+        admin = msg.sender;
+
+        initialize(comptroller_, interestRateModel_, initialExchangeRateMantissa_, name_, symbol_, decimals_);
+
         // Set the proper admin now that initialization is done
         admin = admin_;
     }
@@ -34,7 +38,7 @@ contract CEther is CToken {
     /*** User Interface ***/
 
     /**
-     * @notice Sender supplies assets into the market and receives cTokens in exchange
+     * @notice Sender supplies assets into the market and receives oTokens in exchange
      * @dev Reverts upon any failure
      */
     function mint() external payable {
@@ -43,9 +47,9 @@ contract CEther is CToken {
     }
 
     /**
-     * @notice Sender redeems cTokens in exchange for the underlying asset
+     * @notice Sender redeems oTokens in exchange for the underlying asset
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
-     * @param redeemTokens The number of cTokens to redeem into underlying
+     * @param redeemTokens The number of oTokens to redeem into underlying
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function redeem(uint redeemTokens) external returns (uint) {
@@ -53,7 +57,7 @@ contract CEther is CToken {
     }
 
     /**
-     * @notice Sender redeems cTokens in exchange for a specified amount of underlying asset
+     * @notice Sender redeems oTokens in exchange for a specified amount of underlying asset
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
      * @param redeemAmount The amount of underlying to redeem
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
@@ -94,11 +98,11 @@ contract CEther is CToken {
      * @notice The sender liquidates the borrowers collateral.
      *  The collateral seized is transferred to the liquidator.
      * @dev Reverts upon any failure
-     * @param borrower The borrower of this cToken to be liquidated
-     * @param cTokenCollateral The market in which to seize collateral from the borrower
+     * @param borrower The borrower of this oToken to be liquidated
+     * @param oTokenCollateral The market in which to seize collateral from the borrower
      */
-    function liquidateBorrow(address borrower, CToken cTokenCollateral) external payable {
-        (uint err,) = liquidateBorrowInternal(borrower, msg.value, cTokenCollateral);
+    function liquidateBorrow(address borrower, OToken oTokenCollateral) external payable {
+        (uint err,) = liquidateBorrowInternal(borrower, msg.value, oTokenCollateral);
         requireNoError(err, "liquidateBorrow failed");
     }
 
@@ -111,7 +115,7 @@ contract CEther is CToken {
     }
 
     /**
-     * @notice Send Ether to CEther to mint
+     * @notice Send Matic to OMatic to mint
      */
     function () external payable {
         (uint err,) = mintInternal(msg.value);
@@ -121,9 +125,9 @@ contract CEther is CToken {
     /*** Safe Token ***/
 
     /**
-     * @notice Gets balance of this contract in terms of Ether, before this message
+     * @notice Gets balance of this contract in terms of Matic, before this message
      * @dev This excludes the value of the current message, if any
-     * @return The quantity of Ether owned by this contract
+     * @return The quantity of Matic owned by this contract
      */
     function getCashPrior() internal view returns (uint) {
         (MathError err, uint startingBalance) = subUInt(address(this).balance, msg.value);
@@ -133,9 +137,9 @@ contract CEther is CToken {
 
     /**
      * @notice Perform the actual transfer in, which is a no-op
-     * @param from Address sending the Ether
-     * @param amount Amount of Ether being sent
-     * @return The actual amount of Ether transferred
+     * @param from Address sending the Matic
+     * @param amount Amount of Matic being sent
+     * @return The actual amount of Matic transferred
      */
     function doTransferIn(address from, uint amount) internal returns (uint) {
         // Sanity checks
@@ -145,7 +149,7 @@ contract CEther is CToken {
     }
 
     function doTransferOut(address payable to, uint amount) internal {
-        /* Send the Ether, with minimal gas and revert on failure */
+        /* Send the Matic, with minimal gas and revert on failure */
         to.transfer(amount);
     }
 

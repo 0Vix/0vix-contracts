@@ -1,11 +1,11 @@
-pragma solidity ^0.5.16;
+pragma solidity 0.5.17;
 
 import "./ErrorReporter.sol";
 import "./ComptrollerStorage.sol";
 /**
  * @title ComptrollerCore
  * @dev Storage for the comptroller is at this address, while execution is delegated to the `comptrollerImplementation`.
- * CTokens should reference this contract as their comptroller.
+ * OTokens should reference this contract as their comptroller.
  */
 contract Unitroller is UnitrollerAdminStorage, ComptrollerErrorReporter {
 

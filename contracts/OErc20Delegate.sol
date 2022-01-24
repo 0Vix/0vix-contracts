@@ -1,13 +1,13 @@
-pragma solidity ^0.5.16;
+pragma solidity 0.5.17;
 
-import "./CErc20.sol";
+import "./OErc20.sol";
 
 /**
- * @title Compound's CErc20Delegate Contract
- * @notice CTokens which wrap an EIP-20 underlying and are delegated to
- * @author Compound
+ * @title 0VIX's OErc20Delegate Contract
+ * @notice OTokens which wrap an EIP-20 underlying and are delegated to
+ * @author 0VIX
  */
-contract CErc20Delegate is CErc20, CDelegateInterface {
+contract OErc20Delegate is OErc20, ODelegateInterface {
     /**
      * @notice Construct an empty delegate
      */

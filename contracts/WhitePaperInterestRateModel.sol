@@ -1,32 +1,32 @@
-pragma solidity ^0.5.16;
+pragma solidity 0.5.17;
 
 import "./InterestRateModel.sol";
 import "./SafeMath.sol";
 
 /**
-  * @title Compound's WhitePaperInterestRateModel Contract
-  * @author Compound
-  * @notice The parameterized model described in section 2.4 of the original Compound Protocol whitepaper
+  * @title 0VIX's WhitePaperInterestRateModel Contract
+  * @author 0VIX
+  * @notice The parameterized model described in section 2.4 of the original 0VIX Protocol whitepaper
   */
 contract WhitePaperInterestRateModel is InterestRateModel {
     using SafeMath for uint;
 
-    event NewInterestParams(uint baseRatePerBlock, uint multiplierPerBlock);
+    event NewInterestParams(uint baseRatePerTimestamp, uint multiplierPerTimestamp);
 
     /**
-     * @notice The approximate number of blocks per year that is assumed by the interest rate model
+     * @notice The approximate number of timestamps per year that is assumed by the interest rate model
      */
-    uint public constant blocksPerYear = 2102400;
+    uint public constant timestampsPerYear = 31536000;
 
     /**
      * @notice The multiplier of utilization rate that gives the slope of the interest rate
      */
-    uint public multiplierPerBlock;
+    uint public multiplierPerTimestamp;
 
     /**
      * @notice The base interest rate which is the y-intercept when utilization rate is 0
      */
-    uint public baseRatePerBlock;
+    uint public baseRatePerTimestamp;
 
     /**
      * @notice Construct an interest rate model
@@ -34,10 +34,10 @@ contract WhitePaperInterestRateModel is InterestRateModel {
      * @param multiplierPerYear The rate of increase in interest rate wrt utilization (scaled by 1e18)
      */
     constructor(uint baseRatePerYear, uint multiplierPerYear) public {
-        baseRatePerBlock = baseRatePerYear.div(blocksPerYear);
-        multiplierPerBlock = multiplierPerYear.div(blocksPerYear);
+        baseRatePerTimestamp = baseRatePerYear.mul(1e18).div(timestampsPerYear).div(1e18);
+        multiplierPerTimestamp = multiplierPerYear.mul(1e18).div(timestampsPerYear).div(1e18);
 
-        emit NewInterestParams(baseRatePerBlock, multiplierPerBlock);
+        emit NewInterestParams(baseRatePerTimestamp, multiplierPerTimestamp);
     }
 
     /**
@@ -57,24 +57,24 @@ contract WhitePaperInterestRateModel is InterestRateModel {
     }
 
     /**
-     * @notice Calculates the current borrow rate per block, with the error code expected by the market
+     * @notice Calculates the current borrow rate per timestmp, with the error code expected by the market
      * @param cash The amount of cash in the market
      * @param borrows The amount of borrows in the market
      * @param reserves The amount of reserves in the market
-     * @return The borrow rate percentage per block as a mantissa (scaled by 1e18)
+     * @return The borrow rate percentage per timestmp as a mantissa (scaled by 1e18)
      */
     function getBorrowRate(uint cash, uint borrows, uint reserves) public view returns (uint) {
         uint ur = utilizationRate(cash, borrows, reserves);
-        return ur.mul(multiplierPerBlock).div(1e18).add(baseRatePerBlock);
+        return ur.mul(multiplierPerTimestamp).div(1e18).add(baseRatePerTimestamp);
     }
 
     /**
-     * @notice Calculates the current supply rate per block
+     * @notice Calculates the current supply rate per timestmp
      * @param cash The amount of cash in the market
      * @param borrows The amount of borrows in the market
      * @param reserves The amount of reserves in the market
      * @param reserveFactorMantissa The current reserve factor for the market
-     * @return The supply rate percentage per block as a mantissa (scaled by 1e18)
+     * @return The supply rate percentage per timestmp as a mantissa (scaled by 1e18)
      */
     function getSupplyRate(uint cash, uint borrows, uint reserves, uint reserveFactorMantissa) public view returns (uint) {
         uint oneMinusReserveFactor = uint(1e18).sub(reserveFactorMantissa);

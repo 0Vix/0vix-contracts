@@ -1,11 +1,11 @@
-pragma solidity ^0.5.16;
+pragma solidity 0.5.17;
 
 import "./CarefulMath.sol";
 import "./ExponentialNoError.sol";
 
 /**
  * @title Exponential module for storing fixed-precision decimals
- * @author Compound
+ * @author 0VIX
  * @dev Legacy contract for compatibility reasons with existing contracts that still use MathError
  * @notice Exp is a struct which stores decimals with a fixed precision of 18 decimal places.
  *         Thus, if we wanted to store the 5.1, mantissa would store 5.1e18. That is:
