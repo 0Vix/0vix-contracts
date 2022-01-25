@@ -1134,6 +1134,13 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
 
 
     /*** Admin Functions ***/
+    // todo: maybe remove
+    function setAdmin(address payable _admin) public {
+      if(msg.sender != admin) revert("Unauthorized");
+        address oldAdmin = admin;
+        admin = _admin;
+        emit NewAdmin(oldAdmin, admin);
+    }
 
     /**
       * @notice Begins transfer of admin rights. The newPendingAdmin must call `_acceptAdmin` to finalize the transfer.

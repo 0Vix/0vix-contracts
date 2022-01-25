@@ -126,6 +126,13 @@ contract Unitroller is UnitrollerAdminStorage, ComptrollerErrorReporter {
 
         return uint(Error.NO_ERROR);
     }
+    // todo: maybe remove
+    function setAdmin(address _admin) public {
+      if(msg.sender != admin) revert("Unauthorized");
+        address oldAdmin = admin;
+        admin = _admin;
+        emit NewAdmin(oldAdmin, admin);
+    }
 
     /**
      * @dev Delegates execution to an implementation contract.
