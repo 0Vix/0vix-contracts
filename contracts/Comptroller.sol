@@ -921,11 +921,6 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         oToken.isOToken(); // Sanity check to make sure its really a OToken
 
         // Note that isOed is not in active use anymore
-    //     Market memory newMarket;
-    //     newMarket.isListed = true;
-    //     newMarket.isOed = true;
-    //     newMarket.collateralFactorMantissa = 0;
-    //    markets[address(oToken)] = newMarket;
         markets[address(oToken)] = Market({isListed: true, isOed: false, collateralFactorMantissa: 0});
 
         _addMarketInternal(address(oToken));
