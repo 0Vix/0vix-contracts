@@ -6,7 +6,7 @@ contract Ovix {
     string public constant name = "0VIX";
 
     /// @notice EIP-20 token symbol for this token
-    string public constant symbol = "O";
+    string public constant symbol = "0VIX";
 
     /// @notice EIP-20 token decimals for this token
     uint8 public constant decimals = 18;
