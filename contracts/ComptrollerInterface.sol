@@ -25,12 +25,6 @@ contract ComptrollerInterface {
         address payer,
         address borrower,
         uint repayAmount) external returns (uint);
-    function repayBorrowVerify(
-        address oToken,
-        address payer,
-        address borrower,
-        uint repayAmount,
-        uint borrowerIndex) external;
 
     function liquidateBorrowAllowed(
         address oTokenBorrowed,
@@ -38,13 +32,6 @@ contract ComptrollerInterface {
         address liquidator,
         address borrower,
         uint repayAmount) external returns (uint);
-    function liquidateBorrowVerify(
-        address oTokenBorrowed,
-        address oTokenCollateral,
-        address liquidator,
-        address borrower,
-        uint repayAmount,
-        uint seizeTokens) external;
 
     function seizeAllowed(
         address oTokenCollateral,
@@ -52,6 +39,7 @@ contract ComptrollerInterface {
         address liquidator,
         address borrower,
         uint seizeTokens) external returns (uint);
+        
     function seizeVerify(
         address oTokenCollateral,
         address oTokenBorrowed,

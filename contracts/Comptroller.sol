@@ -1,20 +1,32 @@
 pragma solidity 0.5.17;
 
-import "./OToken.sol";
 import "./ErrorReporter.sol";
-import "./PriceOracle.sol";
 import "./ComptrollerInterface.sol";
 import "./ComptrollerStorage.sol";
-import "./Unitroller.sol";
-import "./Governance/Ovix.sol";
+
+interface Ovix {
+  function transfer(address, uint256) external;
+  function balanceOf(address) external view returns(uint256);
+}
+
+interface Unitroller {
+  function admin() external view returns(address);
+  function _acceptImplementation() external returns (uint);
+}
 
 /**
  * @title 0VIX's Comptroller Contract
  * @author 0VIX
  */
 contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerErrorReporter, ExponentialNoError {
+    /// @notice Emitted when an admin modifies a reward updater
+    event RewardUpdaterModified(address _rewardUpdater);
+
     /// @notice Emitted when an admin supports a market
     event MarketListed(OToken oToken);
+
+    /// @notice Emitted when an admin removes a market
+    event MarketRemoved(OToken oToken);
 
     /// @notice Emitted when an account enters a market
     event MarketEntered(OToken oToken, address account);
@@ -80,8 +92,11 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
     uint8 public constant rewardOvix = 0;
     uint8 public constant rewardMatic = 1;
 
+    address public rewardUpdater;
+    
     constructor() public {
         admin = msg.sender;
+        rewardUpdater = msg.sender;
     }
 
     /*** Assets You Are In ***/
@@ -92,9 +107,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      * @return A dynamic list with the assets the account has entered
      */
     function getAssetsIn(address account) external view returns (OToken[] memory) {
-        OToken[] memory assetsIn = accountAssets[account];
-
-        return assetsIn;
+        return accountAssets[account];
     }
 
     /**
@@ -117,9 +130,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
 
         uint[] memory results = new uint[](len);
         for (uint i = 0; i < len; i++) {
-            OToken oToken = OToken(oTokens[i]);
-
-            results[i] = uint(addToMarketInternal(oToken, msg.sender));
+            results[i] = uint(addToMarketInternal(OToken(oTokens[i]), msg.sender));
         }
 
         return results;
@@ -227,7 +238,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      */
     function mintAllowed(address oToken, address minter, uint mintAmount) external returns (uint) {
         // Pausing is a very serious situation - we revert to sound the alarms
-        require(!mintGuardianPaused[oToken], "mint is paused");
+        require(!mintGuardianPaused[oToken], "mint paused");
 
         // Shh - currently unused
         mintAmount;
@@ -329,7 +340,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      */
     function borrowAllowed(address oToken, address borrower, uint borrowAmount) external returns (uint) {
         // Pausing is a very serious situation - we revert to sound the alarms
-        require(!borrowGuardianPaused[oToken], "borrow is paused");
+        require(!borrowGuardianPaused[oToken], "borrow  paused");
 
         if (!markets[oToken].isListed) {
             return uint(Error.MARKET_NOT_LISTED);
@@ -337,7 +348,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
 
         if (!markets[oToken].accountMembership[borrower]) {
             // only oTokens may call borrowAllowed if borrower not in market
-            require(msg.sender == oToken, "sender must be oToken");
+            require(msg.sender == oToken, "sender not oToken");
 
             // attempt to add borrower to the market
             Error err = addToMarketInternal(OToken(msg.sender), borrower);
@@ -359,7 +370,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         if (borrowCap != 0) {
             uint totalBorrows = OToken(oToken).totalBorrows();
             uint nextTotalBorrows = add_(totalBorrows, borrowAmount);
-            require(nextTotalBorrows < borrowCap, "market borrow cap reached");
+            require(nextTotalBorrows < borrowCap, "borrow cap reached");
         }
 
         (Error err, , uint shortfall) = getHypotheticalAccountLiquidityInternal(borrower, OToken(oToken), 0, borrowAmount);
@@ -371,8 +382,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         }
 
         // Keep the flywheel moving
-        Exp memory borrowIndex = Exp({mantissa: OToken(oToken).borrowIndex()});
-        updateAndDistributeBorrowerRewardsForToken(oToken, borrower, borrowIndex);
+        updateAndDistributeBorrowerRewardsForToken(oToken, borrower, Exp({mantissa: OToken(oToken).borrowIndex()}));
 
         return uint(Error.NO_ERROR);
     }
@@ -418,36 +428,9 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         }
 
         // Keep the flywheel moving
-        Exp memory borrowIndex = Exp({mantissa: OToken(oToken).borrowIndex()});
-        updateAndDistributeBorrowerRewardsForToken(oToken, borrower, borrowIndex);
+        updateAndDistributeBorrowerRewardsForToken(oToken, borrower, Exp({mantissa: OToken(oToken).borrowIndex()}));
 
         return uint(Error.NO_ERROR);
-    }
-
-    /**
-     * @notice Validates repayBorrow and reverts on rejection. May emit logs.
-     * @param oToken Asset being repaid
-     * @param payer The address repaying the borrow
-     * @param borrower The address of the borrower
-     * @param actualRepayAmount The amount of underlying being repaid
-     */
-    function repayBorrowVerify(
-        address oToken,
-        address payer,
-        address borrower,
-        uint actualRepayAmount,
-        uint borrowerIndex) external {
-        // Shh - currently unused
-        oToken;
-        payer;
-        borrower;
-        actualRepayAmount;
-        borrowerIndex;
-
-        // Shh - we don't ever want this hook to be marked pure
-        if (false) {
-            maxAssets = maxAssets;
-        }
     }
 
     /**
@@ -481,42 +464,12 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         }
 
         /* The liquidator may not repay more than what is allowed by the closeFactor */
-        uint borrowBalance = OToken(oTokenBorrowed).borrowBalanceStored(borrower);
-        uint maxClose = mul_ScalarTruncate(Exp({mantissa: closeFactorMantissa}), borrowBalance);
+        uint maxClose = mul_ScalarTruncate(Exp({mantissa: closeFactorMantissa}), OToken(oTokenBorrowed).borrowBalanceStored(borrower));
         if (repayAmount > maxClose) {
             return uint(Error.TOO_MUCH_REPAY);
         }
 
         return uint(Error.NO_ERROR);
-    }
-
-    /**
-     * @notice Validates liquidateBorrow and reverts on rejection. May emit logs.
-     * @param oTokenBorrowed Asset which was borrowed by the borrower
-     * @param oTokenCollateral Asset which was used as collateral and will be seized
-     * @param liquidator The address repaying the borrow and seizing the collateral
-     * @param borrower The address of the borrower
-     * @param actualRepayAmount The amount of underlying being repaid
-     */
-    function liquidateBorrowVerify(
-        address oTokenBorrowed,
-        address oTokenCollateral,
-        address liquidator,
-        address borrower,
-        uint actualRepayAmount,
-        uint seizeTokens) external {
-        // Shh - currently unused
-        oTokenBorrowed;
-        oTokenCollateral;
-        liquidator;
-        borrower;
-        actualRepayAmount;
-        seizeTokens;
-
-        // Shh - we don't ever want this hook to be marked pure
-        if (false) {
-            maxAssets = maxAssets;
-        }
     }
 
     /**
@@ -534,7 +487,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         address borrower,
         uint seizeTokens) external returns (uint) {
         // Pausing is a very serious situation - we revert to sound the alarms
-        require(!seizeGuardianPaused, "seize is paused");
+        require(!seizeGuardianPaused, "seize paused");
 
         // Shh - currently unused
         seizeTokens;
@@ -591,7 +544,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      */
     function transferAllowed(address oToken, address src, address dst, uint transferTokens) external returns (uint) {
         // Pausing is a very serious situation - we revert to sound the alarms
-        require(!transferGuardianPaused, "transfer is paused");
+        require(!transferGuardianPaused, "transfer paused");
 
         // Currently the only consideration is whether or not
         //  the src is allowed to redeem this many tokens
@@ -828,7 +781,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
       */
     function _setCloseFactor(uint newCloseFactorMantissa) external returns (uint) {
         // Check caller is admin
-    	require(msg.sender == admin, "only admin can set close factor");
+    	require(msg.sender == admin, "only admin");
 
         uint oldCloseFactorMantissa = closeFactorMantissa;
         closeFactorMantissa = newCloseFactorMantissa;
@@ -937,6 +890,32 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         allMarkets.push(OToken(oToken));
     }
 
+    function _removeMarket(OToken oToken) external returns (uint256) {
+        require(msg.sender == admin);
+        require(markets[address(oToken)].isListed);
+
+        oToken.isOToken(); // Sanity check to make sure its really a CToken
+
+        require(
+            OToken(oToken).totalBorrowsCurrent() == 0,
+            "market has borrows"
+        );
+
+      require(OToken(oToken).totalSupply() == 0, "market has supply");
+
+       for (uint256 i = 0; i < allMarkets.length; i++) {
+            if (allMarkets[i] == oToken) {
+                allMarkets[i] = allMarkets[allMarkets.length - 1];
+                allMarkets.length--;
+                break;
+            }
+        }
+        delete markets[address(oToken)];
+
+        emit MarketRemoved(oToken);
+        return uint256(Error.NO_ERROR);
+    }
+
 
     /**
       * @notice Set the given borrow caps for the given oToken markets. Borrowing that brings total borrows to or above borrow cap will revert.
@@ -945,7 +924,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
       * @param newBorrowCaps The new borrow cap values in underlying to be set. A value of 0 corresponds to unlimited borrowing.
       */
     function _setMarketBorrowCaps(OToken[] calldata oTokens, uint[] calldata newBorrowCaps) external {
-    	require(msg.sender == admin || msg.sender == borrowCapGuardian, "only admin or borrow cap guardian can set borrow caps"); 
+    	require(msg.sender == admin || msg.sender == borrowCapGuardian, "only admin or borrow cap guard"); 
 
         uint numMarkets = oTokens.length;
         uint numBorrowCaps = newBorrowCaps.length;
@@ -963,7 +942,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      * @param newBorrowCapGuardian The address of the new Borrow Cap Guardian
      */
     function _setBorrowCapGuardian(address newBorrowCapGuardian) external {
-        require(msg.sender == admin, "only admin can set borrow cap guardian");
+        require(msg.sender == admin, "only admin or borrow cap guard");
 
         // Save current value for inclusion in log
         address oldBorrowCapGuardian = borrowCapGuardian;
@@ -997,46 +976,43 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         return uint(Error.NO_ERROR);
     }
 
-    function _setMintPaused(OToken oToken, bool state) public returns (bool) {
-        require(markets[address(oToken)].isListed, "cannot pause a market that is not listed");
-        require(msg.sender == pauseGuardian || msg.sender == admin, "only pause guardian and admin can pause");
-        require(msg.sender == admin || state == true, "only admin can unpause");
+    function onlyAdminOrGuardian(bool state) internal view {
+        require(msg.sender == pauseGuardian || msg.sender == admin, "only pause guardian and admin");
+        require(msg.sender == admin || state == true, "only admin");
+    }
 
+    function _setMintPaused(OToken oToken, bool state) public returns (bool) {
+        require(markets[address(oToken)].isListed, "market not listed");
+        onlyAdminOrGuardian(state);
         mintGuardianPaused[address(oToken)] = state;
         emit ActionPaused(oToken, "Mint", state);
         return state;
     }
 
     function _setBorrowPaused(OToken oToken, bool state) public returns (bool) {
-        require(markets[address(oToken)].isListed, "cannot pause a market that is not listed");
-        require(msg.sender == pauseGuardian || msg.sender == admin, "only pause guardian and admin can pause");
-        require(msg.sender == admin || state == true, "only admin can unpause");
-
+        require(markets[address(oToken)].isListed, "market not listed");
+        onlyAdminOrGuardian(state);
         borrowGuardianPaused[address(oToken)] = state;
         emit ActionPaused(oToken, "Borrow", state);
         return state;
     }
 
     function _setTransferPaused(bool state) public returns (bool) {
-        require(msg.sender == pauseGuardian || msg.sender == admin, "only pause guardian and admin can pause");
-        require(msg.sender == admin || state == true, "only admin can unpause");
-
+        onlyAdminOrGuardian(state);
         transferGuardianPaused = state;
         emit ActionPaused("Transfer", state);
         return state;
     }
 
     function _setSeizePaused(bool state) public returns (bool) {
-        require(msg.sender == pauseGuardian || msg.sender == admin, "only pause guardian and admin can pause");
-        require(msg.sender == admin || state == true, "only admin can unpause");
-
+        onlyAdminOrGuardian(state);
         seizeGuardianPaused = state;
         emit ActionPaused("Seize", state);
         return state;
     }
 
     function _become(Unitroller unitroller) public {
-        require(msg.sender == unitroller.admin(), "only unitroller admin can change brains");
+        require(msg.sender == unitroller.admin(), "only unitroller admin");
         require(unitroller._acceptImplementation() == 0, "change not authorized");
     }
 
@@ -1065,7 +1041,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         } else if (newSpeed != 0) {
             // Add the 0VIX market
             Market storage market = markets[address(oToken)];
-            require(market.isListed == true, "beno market is not listed");
+            require(market.isListed == true, "ovix market is not listed");
 
             if (rewardSupplyState[rewardType][address(oToken)].index == 0 && rewardSupplyState[rewardType][address(oToken)].timestamp == 0) {
                 rewardSupplyState[rewardType][address(oToken)] = RewardMarketState({
@@ -1196,7 +1172,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      */
     function distributeBorrowerReward(uint8 rewardType, address oToken, address borrower, Exp memory marketBorrowIndex) internal {
         require(rewardType <= 1, "rewardType is invalid"); 
-        RewardMarketState storage borrowState = rewardBorrowState [rewardType][oToken];
+        RewardMarketState storage borrowState = rewardBorrowState[rewardType][oToken];
         Double memory borrowIndex = Double({mantissa: borrowState.index});
         Double memory borrowerIndex = Double({mantissa: rewardBorrowerIndex[rewardType][oToken][borrower]});
         rewardBorrowerIndex[rewardType][oToken][borrower] = borrowIndex.mantissa;
@@ -1212,7 +1188,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
     }
 
     /**
-     * @notice Claim all the beno accrued by holder in all markets
+     * @notice Claim all the ovix accrued by holder in all markets
      * @param holder The address to claim 0VIX for
      */
     function claimReward(uint8 rewardType, address payable holder) public {
@@ -1220,7 +1196,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
     }
 
     /**
-     * @notice Claim all the beno accrued by holder in the specified markets
+     * @notice Claim all the ovix accrued by holder in the specified markets
      * @param holder The address to claim 0VIX for
      * @param oTokens The list of markets to claim 0VIX in
      */
@@ -1270,15 +1246,15 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      */
     function grantRewardInternal(uint rewardType, address payable user, uint amount) internal returns (uint) {
         if (rewardType == 0) {
-            Ovix beno = Ovix(oAddress);
-            uint oRemaining = beno.balanceOf(address(this));
+            Ovix ovix = Ovix(oAddress);
+            uint oRemaining = ovix.balanceOf(address(this));
             if (amount > 0 && amount <= oRemaining) {
-                beno.transfer(user, amount);
+                ovix.transfer(user, amount);
                 return 0;
             }
         } else if (rewardType == 1) {
-            uint avaxRemaining = address(this).balance;
-            if (amount > 0 && amount <= avaxRemaining) {
+            uint ovixRemaining = address(this).balance;
+            if (amount > 0 && amount <= ovixRemaining) {
                 user.transfer(amount);
                 return 0;
             }
@@ -1295,9 +1271,9 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      * @param amount The amount of 0VIX to (possibly) transfer
      */
     function _grantOvix(address payable recipient, uint amount) public {
-        require(adminOrInitializing(), "only admin can grant beno");
+        require(adminOrInitializing(), "only admin can grant ovix");
         uint amountLeft = grantRewardInternal(0, recipient, amount);
-        require(amountLeft == 0, "insufficient beno for grant");
+        require(amountLeft == 0, "insufficient ovix for grant");
         emit OGranted(recipient, amount);
     }
 
@@ -1309,7 +1285,8 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      */
     function _setRewardSpeed(uint8 rewardType, OToken oToken, uint rewardSpeed) public {
         require(rewardType <= 1, "rewardType is invalid"); 
-        require(adminOrInitializing(), "only admin can set reward speed");
+        require(msg.sender != address(0));
+        require(adminOrInitializing() || msg.sender == rewardUpdater, "only admin");
         setRewardSpeedInternal(rewardType, oToken, rewardSpeed);
     }
 
@@ -1332,6 +1309,15 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
     function setOAddress(address newOAddress) public {
         require(msg.sender == admin);
         oAddress = newOAddress;
+    }
+
+    /**
+     * @notice set reward updater address
+     */
+    function setRewardUpdater(address _rewardUpdater) public {
+        require(msg.sender == admin);
+        rewardUpdater = _rewardUpdater;
+        emit RewardUpdaterModified(_rewardUpdater);
     }
 
     /**
