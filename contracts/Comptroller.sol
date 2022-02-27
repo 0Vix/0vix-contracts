@@ -1075,7 +1075,8 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         uint deltaTimestamps = sub_(blockTimestamp, uint(supplyState.timestamp));
         if (deltaTimestamps > 0) {
             if (supplySpeed > 0) {
-                uint supplyTokens = OToken(oToken).totalSupply();
+                //uint supplyTokens = OToken(oToken).totalSupply();
+                uint supplyTokens = boostManager.boostedTotalSupply(oToken);
                 uint oAccrued = mul_(deltaTimestamps, supplySpeed);
                 //Double memory ratio = supplyTokens > 0 ? fraction(oAccrued, supplyTokens) : Double({mantissa: 0});
                 Double memory index = add_(
@@ -1105,9 +1106,9 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         uint deltaTimestamps = sub_(blockTimestamp, uint(borrowState.timestamp));
         if (deltaTimestamps > 0) {
             if (borrowSpeed > 0) {
-                uint borrowAmount = div_(OToken(oToken).totalBorrows(), marketBorrowIndex);
+                //uint borrowAmount = div_(OToken(oToken).totalBorrows(), marketBorrowIndex);
+                uint borrowAmount = div_(boostManager.boostedTotalBorrows(oToken), marketBorrowIndex);
                 uint oAccrued = mul_(deltaTimestamps, borrowSpeed);
-                //Double memory ratio = borrowAmount > 0 ? fraction(oAccrued, borrowAmount) : Double({mantissa: 0});
                 Double memory index = add_(
                     Double({mantissa: borrowState.index}), 
                     borrowAmount > 0 ? fraction(oAccrued, borrowAmount) : Double({mantissa: 0})
@@ -1152,7 +1153,8 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         }
 
         Double memory deltaIndex = sub_(supplyIndex, supplierIndex);
-        uint supplierTokens = OToken(oToken).balanceOf(supplier);
+        //uint supplierTokens = OToken(oToken).balanceOf(supplier);
+        uint supplierTokens = boostManager.boostedSupplyBalanceOf(oToken, supplier);
         uint supplierDelta = mul_(supplierTokens, deltaIndex);
         uint supplierAccrued = add_(rewardAccrued[rewardType][supplier], supplierDelta);
         rewardAccrued[rewardType][supplier] = supplierAccrued;
@@ -1187,7 +1189,8 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
 
         if (borrowerIndex.mantissa > 0) {
             Double memory deltaIndex = sub_(borrowIndex, borrowerIndex);
-            uint borrowerAmount = div_(OToken(oToken).borrowBalanceStored(borrower), marketBorrowIndex);
+            //uint borrowerAmount = div_(OToken(oToken).borrowBalanceStored(borrower), marketBorrowIndex);
+            uint borrowerAmount = div_(boostManager.boostedBorrowBalanceOf(oToken, borrower), marketBorrowIndex);
             uint borrowerDelta = mul_(borrowerAmount, deltaIndex);
             uint borrowerAccrued = add_(rewardAccrued[rewardType][borrower], borrowerDelta);
             rewardAccrued[rewardType][borrower] = borrowerAccrued;
@@ -1317,15 +1320,24 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      * @notice Set the Ovix token address
      */
     function setOAddress(address newOAddress) public onlyAdmin {
-        //require(msg.sender == admin);
         oAddress = newOAddress;
+    }
+
+    function getBoostManager() external view returns(address) {
+        return address(boostManager);
+    }
+
+    /**
+     * @notice Set the booster manager address
+     */
+    function setBoosterManager(address newBoosterManager) public onlyAdmin {
+        boostManager = IBoostManager(newBoosterManager);
     }
 
     /**
      * @notice set reward updater address
      */
     function setRewardUpdater(address _rewardUpdater) public onlyAdmin {
-        //require(msg.sender == admin);
         rewardUpdater = _rewardUpdater;
         emit RewardUpdaterModified(_rewardUpdater);
     }

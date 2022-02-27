@@ -3,6 +3,8 @@ pragma solidity 0.5.17;
 import "./OToken.sol";
 import "./PriceOracle.sol";
 
+import "./IBoostManager.sol";
+
 contract UnitrollerAdminStorage {
     /**
     * @notice Administrator for this contract
@@ -135,4 +137,6 @@ contract ComptrollerVXStorage is UnitrollerAdminStorage {
 
     /// @notice O token contract address
     address public oAddress;
+
+    IBoostManager public boostManager;
 }
