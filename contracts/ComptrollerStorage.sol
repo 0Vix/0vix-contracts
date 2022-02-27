@@ -56,6 +56,9 @@ contract ComptrollerVXStorage is UnitrollerAdminStorage {
         /// @notice Whether or not this market is listed
         bool isListed;
 
+        /// @notice Whether or not this market receives 0VIX
+        bool isOed;
+
         /**
          * @notice Multiplier representing the most one can borrow against their collateral in this market.
          *  For instance, 0.9 to allow borrowing 90% of collateral value.
@@ -65,9 +68,6 @@ contract ComptrollerVXStorage is UnitrollerAdminStorage {
 
         /// @notice Per-market mapping of "accounts in this asset"
         mapping(address => bool) accountMembership;
-
-        /// @notice Whether or not this market receives 0VIX
-        bool isOed;
     }
 
     /**
@@ -87,8 +87,13 @@ contract ComptrollerVXStorage is UnitrollerAdminStorage {
     bool public _borrowGuardianPaused;
     bool public transferGuardianPaused;
     bool public seizeGuardianPaused;
-    mapping(address => bool) public mintGuardianPaused;
-    mapping(address => bool) public borrowGuardianPaused;
+
+    struct PauseData {
+        bool mint;
+        bool borrow;
+    }
+
+    mapping(address => PauseData) public guardianPaused;
 
     /// @notice A list of all markets
     OToken[] public allMarkets;

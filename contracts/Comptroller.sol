@@ -76,6 +76,11 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
     /// @notice Emitted when 0VIX is granted by admin
     event OGranted(address recipient, uint amount);
 
+    modifier onlyAdmin() {
+        require(msg.sender == admin);
+        _;
+    }
+
     /// @notice The initial 0VIX and MATIC index for a market
     uint224 public constant initialIndexConstant = 1e36;
 
@@ -179,7 +184,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         OToken oToken = OToken(oTokenAddress);
         /* Get sender tokensHeld and amountOwed underlying from the oToken */
         (uint oErr, uint tokensHeld, uint amountOwed, ) = oToken.getAccountSnapshot(msg.sender);
-        require(oErr == 0, "exitMarket: getAccountSnapshot failed"); // semi-opaque error code
+        require(oErr == 0, "exitMarket: getAccountSnapshot"); // semi-opaque error code
 
         /* Fail if the sender has a borrow balance */
         if (amountOwed != 0) {
@@ -238,7 +243,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      */
     function mintAllowed(address oToken, address minter, uint mintAmount) external returns (uint) {
         // Pausing is a very serious situation - we revert to sound the alarms
-        require(!mintGuardianPaused[oToken], "mint paused");
+        require(!guardianPaused[oToken].mint, "mint paused");
 
         // Shh - currently unused
         mintAmount;
@@ -340,7 +345,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      */
     function borrowAllowed(address oToken, address borrower, uint borrowAmount) external returns (uint) {
         // Pausing is a very serious situation - we revert to sound the alarms
-        require(!borrowGuardianPaused[oToken], "borrow  paused");
+        require(!guardianPaused[oToken].borrow, "borrow  paused");
 
         if (!markets[oToken].isListed) {
             return uint(Error.MARKET_NOT_LISTED);
@@ -455,7 +460,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         }
 
         /* The borrower must have shortfall in order to be liquidatable */
-        (Error err, , uint shortfall) = getAccountLiquidityInternal(borrower);
+        (Error err, , uint shortfall) = getHypotheticalAccountLiquidityInternal(borrower, OToken(0), 0, 0);
         if (err != Error.NO_ERROR) {
             return uint(err);
         }
@@ -588,12 +593,9 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      *  whereas `borrowBalance` is the amount of underlying that the account has borrowed.
      */
     struct AccountLiquidityLocalVars {
-        uint sumCollateral;
-        uint sumBorrowPlusEffects;
         uint oTokenBalance;
         uint borrowBalance;
         uint exchangeRateMantissa;
-        uint oraclePriceMantissa;
         Exp collateralFactor;
         Exp exchangeRate;
         Exp oraclePrice;
@@ -610,16 +612,6 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         (Error err, uint liquidity, uint shortfall) = getHypotheticalAccountLiquidityInternal(account, OToken(0), 0, 0);
 
         return (uint(err), liquidity, shortfall);
-    }
-
-    /**
-     * @notice Determine the current account liquidity wrt collateral requirements
-     * @return (possible error code,
-                account liquidity in excess of collateral requirements,
-     *          account shortfall below collateral requirements)
-     */
-    function getAccountLiquidityInternal(address account) internal view returns (Error, uint, uint) {
-        return getHypotheticalAccountLiquidityInternal(account, OToken(0), 0, 0);
     }
 
     /**
@@ -659,14 +651,17 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         uint redeemTokens,
         uint borrowAmount) internal view returns (Error, uint, uint) {
 
-        AccountLiquidityLocalVars memory vars; // Holds all our calculation results
+        AccountLiquidityLocalVars memory vars; // Holds calculation vars
         uint oErr;
 
         // For each asset the account is in
         OToken[] memory assets = accountAssets[account];
+
+        uint256 sumCollateral;
+        uint256 sumBorrowPlusEffects;
+
         for (uint i = 0; i < assets.length; i++) {
             OToken asset = assets[i];
-
             // Read the balances and exchange rate from the oToken
             (oErr, vars.oTokenBalance, vars.borrowBalance, vars.exchangeRateMantissa) = asset.getAccountSnapshot(account);
             if (oErr != 0) { // semi-opaque error code, we assume NO_ERROR == 0 is invariant between upgrades
@@ -676,38 +671,38 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
             vars.exchangeRate = Exp({mantissa: vars.exchangeRateMantissa});
 
             // Get the normalized price of the asset
-            vars.oraclePriceMantissa = oracle.getUnderlyingPrice(asset);
-            if (vars.oraclePriceMantissa == 0) {
+            uint256 oraclePriceMantissa = oracle.getUnderlyingPrice(asset);
+            if (oraclePriceMantissa == 0) {
                 return (Error.PRICE_ERROR, 0, 0);
             }
-            vars.oraclePrice = Exp({mantissa: vars.oraclePriceMantissa});
+            vars.oraclePrice = Exp({mantissa: oraclePriceMantissa});
 
             // Pre-compute a conversion factor from tokens -> avax (normalized price value)
             vars.tokensToDenom = mul_(mul_(vars.collateralFactor, vars.exchangeRate), vars.oraclePrice);
 
             // sumCollateral += tokensToDenom * oTokenBalance
-            vars.sumCollateral = mul_ScalarTruncateAddUInt(vars.tokensToDenom, vars.oTokenBalance, vars.sumCollateral);
+            sumCollateral = mul_ScalarTruncateAddUInt(vars.tokensToDenom, vars.oTokenBalance, sumCollateral);
 
             // sumBorrowPlusEffects += oraclePrice * borrowBalance
-            vars.sumBorrowPlusEffects = mul_ScalarTruncateAddUInt(vars.oraclePrice, vars.borrowBalance, vars.sumBorrowPlusEffects);
+            sumBorrowPlusEffects = mul_ScalarTruncateAddUInt(vars.oraclePrice, vars.borrowBalance, sumBorrowPlusEffects);
 
             // Calculate effects of interacting with oTokenModify
             if (asset == oTokenModify) {
                 // redeem effect
                 // sumBorrowPlusEffects += tokensToDenom * redeemTokens
-                vars.sumBorrowPlusEffects = mul_ScalarTruncateAddUInt(vars.tokensToDenom, redeemTokens, vars.sumBorrowPlusEffects);
+                sumBorrowPlusEffects = mul_ScalarTruncateAddUInt(vars.tokensToDenom, redeemTokens, sumBorrowPlusEffects);
 
                 // borrow effect
                 // sumBorrowPlusEffects += oraclePrice * borrowAmount
-                vars.sumBorrowPlusEffects = mul_ScalarTruncateAddUInt(vars.oraclePrice, borrowAmount, vars.sumBorrowPlusEffects);
+                sumBorrowPlusEffects = mul_ScalarTruncateAddUInt(vars.oraclePrice, borrowAmount, sumBorrowPlusEffects);
             }
         }
 
         // These are safe, as the underflow condition is checked first
-        if (vars.sumCollateral > vars.sumBorrowPlusEffects) {
-            return (Error.NO_ERROR, vars.sumCollateral - vars.sumBorrowPlusEffects, 0);
+        if (sumCollateral > sumBorrowPlusEffects) {
+            return (Error.NO_ERROR, sumCollateral - sumBorrowPlusEffects, 0);
         } else {
-            return (Error.NO_ERROR, 0, vars.sumBorrowPlusEffects - vars.sumCollateral);
+            return (Error.NO_ERROR, 0, sumBorrowPlusEffects - sumCollateral);
         }
     }
 
@@ -734,16 +729,11 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
          *   = actualRepayAmount * (liquidationIncentive * priceBorrowed) / (priceCollateral * exchangeRate)
          */
         uint exchangeRateMantissa = OToken(oTokenCollateral).exchangeRateStored(); // Note: reverts on error
-        uint seizeTokens;
-        Exp memory numerator;
-        Exp memory denominator;
-        Exp memory ratio;
+        
+        Exp memory numerator = mul_(Exp({mantissa: liquidationIncentiveMantissa}), Exp({mantissa: priceBorrowedMantissa}));
+        Exp memory denominator = mul_(Exp({mantissa: priceCollateralMantissa}), Exp({mantissa: exchangeRateMantissa}));
 
-        numerator = mul_(Exp({mantissa: liquidationIncentiveMantissa}), Exp({mantissa: priceBorrowedMantissa}));
-        denominator = mul_(Exp({mantissa: priceCollateralMantissa}), Exp({mantissa: exchangeRateMantissa}));
-        ratio = div_(numerator, denominator);
-
-        seizeTokens = mul_ScalarTruncate(ratio, actualRepayAmount);
+        uint seizeTokens = mul_ScalarTruncate(div_(numerator, denominator), actualRepayAmount);
 
         return (uint(Error.NO_ERROR), seizeTokens);
     }
@@ -779,9 +769,9 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
       * @param newCloseFactorMantissa New close factor, scaled by 1e18
       * @return uint 0=success, otherwise a failure
       */
-    function _setCloseFactor(uint newCloseFactorMantissa) external returns (uint) {
+    function _setCloseFactor(uint newCloseFactorMantissa) external onlyAdmin returns (uint) {
         // Check caller is admin
-    	require(msg.sender == admin, "only admin");
+    	//require(msg.sender == admin, "only admin");
 
         uint oldCloseFactorMantissa = closeFactorMantissa;
         closeFactorMantissa = newCloseFactorMantissa;
@@ -890,8 +880,8 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         allMarkets.push(OToken(oToken));
     }
 
-    function _removeMarket(OToken oToken) external returns (uint256) {
-        require(msg.sender == admin);
+    function _removeMarket(OToken oToken) external onlyAdmin returns (uint256) {
+        //require(msg.sender == admin);
         require(markets[address(oToken)].isListed);
 
         oToken.isOToken(); // Sanity check to make sure its really a CToken
@@ -941,8 +931,8 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      * @notice Admin function to change the Borrow Cap Guardian
      * @param newBorrowCapGuardian The address of the new Borrow Cap Guardian
      */
-    function _setBorrowCapGuardian(address newBorrowCapGuardian) external {
-        require(msg.sender == admin, "only admin or borrow cap guard");
+    function _setBorrowCapGuardian(address newBorrowCapGuardian) onlyAdmin external {
+        //require(msg.sender == admin, "only admin or borrow cap guard");
 
         // Save current value for inclusion in log
         address oldBorrowCapGuardian = borrowCapGuardian;
@@ -977,14 +967,13 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
     }
 
     function onlyAdminOrGuardian(bool state) internal view {
-        require(msg.sender == pauseGuardian || msg.sender == admin, "only pause guardian and admin");
-        require(msg.sender == admin || state == true, "only admin");
+        require(msg.sender == admin || (msg.sender == pauseGuardian && state), "only pause guardian and admin");
     }
 
     function _setMintPaused(OToken oToken, bool state) public returns (bool) {
         require(markets[address(oToken)].isListed, "market not listed");
         onlyAdminOrGuardian(state);
-        mintGuardianPaused[address(oToken)] = state;
+        guardianPaused[address(oToken)].mint = state;
         emit ActionPaused(oToken, "Mint", state);
         return state;
     }
@@ -992,7 +981,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
     function _setBorrowPaused(OToken oToken, bool state) public returns (bool) {
         require(markets[address(oToken)].isListed, "market not listed");
         onlyAdminOrGuardian(state);
-        borrowGuardianPaused[address(oToken)] = state;
+        guardianPaused[address(oToken)].borrow = state;
         emit ActionPaused(oToken, "Borrow", state);
         return state;
     }
@@ -1075,17 +1064,22 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         uint supplySpeed = rewardSpeeds[rewardType][oToken];
         uint blockTimestamp = getBlockTimestamp();
         uint deltaTimestamps = sub_(blockTimestamp, uint(supplyState.timestamp));
-        if (deltaTimestamps > 0 && supplySpeed > 0) {
-            uint supplyTokens = OToken(oToken).totalSupply();
-            uint oAccrued = mul_(deltaTimestamps, supplySpeed);
-            Double memory ratio = supplyTokens > 0 ? fraction(oAccrued, supplyTokens) : Double({mantissa: 0});
-            Double memory index = add_(Double({mantissa: supplyState.index}), ratio);
-            rewardSupplyState[rewardType][oToken] = RewardMarketState({
-                index: safe224(index.mantissa, "new index exceeds 224 bits"),
-                timestamp: safe32(blockTimestamp, "block timestamp exceeds 32 bits")
-            });
-        } else if (deltaTimestamps > 0) {
-            supplyState.timestamp = safe32(blockTimestamp, "block timestamp exceeds 32 bits");
+        if (deltaTimestamps > 0) {
+            if (supplySpeed > 0) {
+                uint supplyTokens = OToken(oToken).totalSupply();
+                uint oAccrued = mul_(deltaTimestamps, supplySpeed);
+                //Double memory ratio = supplyTokens > 0 ? fraction(oAccrued, supplyTokens) : Double({mantissa: 0});
+                Double memory index = add_(
+                    Double({mantissa: supplyState.index}), 
+                    supplyTokens > 0 ? fraction(oAccrued, supplyTokens) : Double({mantissa: 0})
+                );
+                rewardSupplyState[rewardType][oToken] = RewardMarketState({
+                    index: safe224(index.mantissa, "new index exceeds 224 bits"),
+                    timestamp: safe32(blockTimestamp, "block timestamp exceeds 32 bits")
+                });
+            } else {
+                supplyState.timestamp = safe32(blockTimestamp, "block timestamp exceeds 32 bits");
+            }
         }
     }
 
@@ -1100,17 +1094,22 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         uint borrowSpeed = rewardSpeeds[rewardType][oToken];
         uint blockTimestamp = getBlockTimestamp();
         uint deltaTimestamps = sub_(blockTimestamp, uint(borrowState.timestamp));
-        if (deltaTimestamps > 0 && borrowSpeed > 0) {
-            uint borrowAmount = div_(OToken(oToken).totalBorrows(), marketBorrowIndex);
-            uint oAccrued = mul_(deltaTimestamps, borrowSpeed);
-            Double memory ratio = borrowAmount > 0 ? fraction(oAccrued, borrowAmount) : Double({mantissa: 0});
-            Double memory index = add_(Double({mantissa: borrowState.index}), ratio);
-            rewardBorrowState[rewardType][oToken] = RewardMarketState({
-                index: safe224(index.mantissa, "new index exceeds 224 bits"),
-                timestamp: safe32(blockTimestamp, "block timestamp exceeds 32 bits")
-            });
-        } else if (deltaTimestamps > 0) {
-            borrowState.timestamp = safe32(blockTimestamp, "block timestamp exceeds 32 bits");
+        if (deltaTimestamps > 0) {
+            if (borrowSpeed > 0) {
+                uint borrowAmount = div_(OToken(oToken).totalBorrows(), marketBorrowIndex);
+                uint oAccrued = mul_(deltaTimestamps, borrowSpeed);
+                //Double memory ratio = borrowAmount > 0 ? fraction(oAccrued, borrowAmount) : Double({mantissa: 0});
+                Double memory index = add_(
+                    Double({mantissa: borrowState.index}), 
+                    borrowAmount > 0 ? fraction(oAccrued, borrowAmount) : Double({mantissa: 0})
+                );
+                rewardBorrowState[rewardType][oToken] = RewardMarketState({
+                    index: safe224(index.mantissa, "new index exceeds 224 bits"),
+                    timestamp: safe32(blockTimestamp, "block timestamp exceeds 32 bits")
+                });
+            } else {
+                borrowState.timestamp = safe32(blockTimestamp, "block timestamp exceeds 32 bits");
+            }
         }
     }
 
@@ -1192,7 +1191,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      * @param holder The address to claim 0VIX for
      */
     function claimReward(uint8 rewardType, address payable holder) public {
-        return claimReward(rewardType,holder, allMarkets);
+        return claimReward(rewardType, holder, allMarkets);
     }
 
     /**
@@ -1219,7 +1218,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         for (uint i = 0; i < oTokens.length; i++) {
             OToken oToken = oTokens[i];
             require(markets[address(oToken)].isListed, "market must be listed");
-            if (borrowers == true) {
+            if (borrowers) {
                 Exp memory borrowIndex = Exp({mantissa: oToken.borrowIndex()});
                 updateRewardBorrowIndex(rewardType,address(oToken), borrowIndex);
                 for (uint j = 0; j < holders.length; j++) {
@@ -1227,7 +1226,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
                     rewardAccrued[rewardType][holders[j]] = grantRewardInternal(rewardType, holders[j], rewardAccrued[rewardType][holders[j]]);
                 }
             }
-            if (suppliers == true) {
+            if (suppliers) {
                 updateRewardSupplyIndex(rewardType,address(oToken));
                 for (uint j = 0; j < holders.length; j++) {
                     distributeSupplierReward(rewardType,address(oToken), holders[j]);
@@ -1245,18 +1244,20 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      * @return The amount of MATIC which was NOT transferred to the user
      */
     function grantRewardInternal(uint rewardType, address payable user, uint amount) internal returns (uint) {
-        if (rewardType == 0) {
-            Ovix ovix = Ovix(oAddress);
-            uint oRemaining = ovix.balanceOf(address(this));
-            if (amount > 0 && amount <= oRemaining) {
-                ovix.transfer(user, amount);
-                return 0;
-            }
-        } else if (rewardType == 1) {
-            uint ovixRemaining = address(this).balance;
-            if (amount > 0 && amount <= ovixRemaining) {
-                user.transfer(amount);
-                return 0;
+        if (amount > 0) {
+            if (rewardType == 0) {
+                Ovix ovix = Ovix(oAddress);
+                uint oRemaining = ovix.balanceOf(address(this));
+                if (amount <= oRemaining) {
+                    ovix.transfer(user, amount);
+                    return 0;
+                }
+            } else if (rewardType == 1) {
+                uint ovixRemaining = address(this).balance;
+                if (amount <= ovixRemaining) {
+                    user.transfer(amount);
+                    return 0;
+                }
             }
         }
         return amount;
@@ -1285,7 +1286,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      */
     function _setRewardSpeed(uint8 rewardType, OToken oToken, uint rewardSpeed) public {
         require(rewardType <= 1, "rewardType is invalid"); 
-        require(msg.sender != address(0));
+        //require(msg.sender != address(0)); TODO: WTF
         require(adminOrInitializing() || msg.sender == rewardUpdater, "only admin");
         setRewardSpeedInternal(rewardType, oToken, rewardSpeed);
     }
@@ -1306,16 +1307,16 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
     /**
      * @notice Set the Ovix token address
      */
-    function setOAddress(address newOAddress) public {
-        require(msg.sender == admin);
+    function setOAddress(address newOAddress) public onlyAdmin {
+        //require(msg.sender == admin);
         oAddress = newOAddress;
     }
 
     /**
      * @notice set reward updater address
      */
-    function setRewardUpdater(address _rewardUpdater) public {
-        require(msg.sender == admin);
+    function setRewardUpdater(address _rewardUpdater) public onlyAdmin {
+        //require(msg.sender == admin);
         rewardUpdater = _rewardUpdater;
         emit RewardUpdaterModified(_rewardUpdater);
     }
