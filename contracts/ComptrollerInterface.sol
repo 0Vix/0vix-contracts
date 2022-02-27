@@ -57,6 +57,6 @@ contract ComptrollerInterface {
         address oTokenCollateral,
         uint repayAmount) external view returns (uint, uint);
 
-        function isMarket(address market) external view returns(bool);
-        function getBoostManager() external view returns(address);
+    function isMarket(address market) external view returns(bool);
+    function getBoostManager() external view returns(address);
 }

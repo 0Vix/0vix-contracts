@@ -126,6 +126,15 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
     }
 
     /**
+     * @notice Returns whether the given token is listed market
+     * @param oToken The oToken to check
+     * @return True if is market, otherwise false.
+     */
+    function isMarket(address oToken) external view returns(bool) {
+        return markets[oToken].isListed;
+    }
+
+    /**
      * @notice Add assets to be included in account liquidity calculation
      * @param oTokens The list of addresses of the oToken markets to be enabled
      * @return Success indicator for whether each corresponding market was entered
