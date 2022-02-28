@@ -1202,8 +1202,24 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      * @notice Claim all the ovix accrued by holder in all markets
      * @param holder The address to claim 0VIX for
      */
-    function claimReward(uint8 rewardType, address payable holder) public {
-        return claimReward(rewardType, holder, allMarkets);
+    function claimReward(uint8 rewardType, address payable holder) public returns(uint256 rewardAmount) {
+        //return claimReward(rewardType, holder, allMarkets);
+        OToken[] memory oTokens = allMarkets;
+        require(rewardType <= 1, "rewardType is invalid");
+        for (uint i = 0; i < oTokens.length; i++) {
+            OToken oToken = oTokens[i];
+            //require(markets[address(oToken)].isListed, "market must be listed");  DEV: as i understand, we can trust allMarkets
+
+            Exp memory borrowIndex = Exp({mantissa: oToken.borrowIndex()});
+            updateRewardBorrowIndex(rewardType,address(oToken), borrowIndex);
+            distributeBorrowerReward(rewardType,address(oToken), holder, borrowIndex);
+            
+            updateRewardSupplyIndex(rewardType,address(oToken));
+            distributeSupplierReward(rewardType,address(oToken), holder);
+
+            rewardAmount += rewardAccrued[rewardType][holder];
+            rewardAccrued[rewardType][holder] = grantRewardInternal(rewardType, holder, rewardAccrued[rewardType][holder]);
+        }
     }
 
     /**
