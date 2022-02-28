@@ -34,16 +34,14 @@ contract ExponentialNoError {
      * @dev Multiply an Exp by a scalar, then truncate to return an unsigned integer.
      */
     function mul_ScalarTruncate(Exp memory a, uint scalar) pure internal returns (uint) {
-        Exp memory product = mul_(a, scalar);
-        return truncate(product);
+        return truncate(mul_(a, scalar));
     }
 
     /**
      * @dev Multiply an Exp by a scalar, truncate, then add an to an unsigned integer, returning an unsigned integer.
      */
     function mul_ScalarTruncateAddUInt(Exp memory a, uint scalar, uint addend) pure internal returns (uint) {
-        Exp memory product = mul_(a, scalar);
-        return add_(truncate(product), addend);
+        return add_(truncate(mul_(a, scalar)), addend);
     }
 
     /**
@@ -92,14 +90,12 @@ contract ExponentialNoError {
         return Double({mantissa: add_(a.mantissa, b.mantissa)});
     }
 
-    function add_(uint a, uint b) pure internal returns (uint) {
-        return add_(a, b, "addition overflow");
+    function add_(uint a, uint b) pure internal returns (uint c) {
+        require((c = a + b ) >= a, "addition overflow");
     }
 
-    function add_(uint a, uint b, string memory errorMessage) pure internal returns (uint) {
-        uint c = a + b;
-        require(c >= a, errorMessage);
-        return c;
+    function add_(uint a, uint b, string memory errorMessage) pure internal returns (uint c) {
+        require((c = a + b ) >= a, errorMessage);
     }
 
     function sub_(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
@@ -110,13 +106,12 @@ contract ExponentialNoError {
         return Double({mantissa: sub_(a.mantissa, b.mantissa)});
     }
 
-    function sub_(uint a, uint b) pure internal returns (uint) {
-        return sub_(a, b, "subtraction underflow");
+    function sub_(uint a, uint b) pure internal returns (uint c) {
+        require((c = a - b) <= a, "subtraction underflow");
     }
 
-    function sub_(uint a, uint b, string memory errorMessage) pure internal returns (uint) {
-        require(b <= a, errorMessage);
-        return a - b;
+    function sub_(uint a, uint b, string memory errorMessage) pure internal returns (uint c) {
+        require((c = a - b) <= a, errorMessage);
     }
 
     function mul_(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
@@ -143,17 +138,12 @@ contract ExponentialNoError {
         return mul_(a, b.mantissa) / doubleScale;
     }
 
-    function mul_(uint a, uint b) pure internal returns (uint) {
-        return mul_(a, b, "multiplication overflow");
+    function mul_(uint a, uint b) pure internal returns (uint c) {
+        require(a == 0 || (c = a * b) / a == b, "multiplication overflow");
     }
 
-    function mul_(uint a, uint b, string memory errorMessage) pure internal returns (uint) {
-        if (a == 0 || b == 0) {
-            return 0;
-        }
-        uint c = a * b;
-        require(c / a == b, errorMessage);
-        return c;
+    function mul_(uint a, uint b, string memory errorMessage) pure internal returns (uint c) {
+        require(a == 0 || (c = a * b) / a == b, errorMessage);
     }
 
     function div_(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
@@ -181,7 +171,8 @@ contract ExponentialNoError {
     }
 
     function div_(uint a, uint b) pure internal returns (uint) {
-        return div_(a, b, "divide by zero");
+        require(b > 0, "divide by zero");
+        return a / b;
     }
 
     function div_(uint a, uint b, string memory errorMessage) pure internal returns (uint) {
