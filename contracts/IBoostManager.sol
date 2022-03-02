@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.5.17;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts@2.5.0/token/ERC20/IERC20.sol";
 
 interface IBoostManager {
     function initialize(IERC20 ve) external;
