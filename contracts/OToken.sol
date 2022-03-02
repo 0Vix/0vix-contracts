@@ -30,7 +30,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
         string memory name_,
         string memory symbol_,
         uint8 decimals_
-    ) public {
+    ) internal {
         require(msg.sender == admin, "only admin may initialize the market");
         require(
             accrualBlockTimestamp == 0 && borrowIndex == 0,
