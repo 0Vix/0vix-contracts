@@ -4,12 +4,12 @@ import "./ErrorReporter.sol";
 import "./ComptrollerInterface.sol";
 import "./ComptrollerStorage.sol";
 
-interface Ovix {
+interface IOvix {
   function transfer(address, uint256) external;
   function balanceOf(address) external view returns(uint256);
 }
 
-interface Unitroller {
+interface IUnitroller {
   function admin() external view returns(address);
   function _acceptImplementation() external returns (uint);
 }
@@ -1009,7 +1009,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         return state;
     }
 
-    function _become(Unitroller unitroller) public {
+    function _become(IUnitroller unitroller) public {
         require(msg.sender == unitroller.admin(), "only unitroller admin");
         require(unitroller._acceptImplementation() == 0, "change not authorized");
     }
@@ -1205,10 +1205,9 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      */
     function claimReward(uint8 rewardType, address payable holder) public returns(uint256 rewardAmount) {
         //return claimReward(rewardType, holder, allMarkets);
-        OToken[] memory oTokens = allMarkets;
         require(rewardType <= 1, "rewardType is invalid");
-        for (uint i = 0; i < oTokens.length; i++) {
-            OToken oToken = oTokens[i];
+        for (uint i = 0; i < allMarkets.length; i++) {
+            OToken oToken = allMarkets[i];
             //require(markets[address(oToken)].isListed, "market must be listed");  DEV: as i understand, we can trust allMarkets
 
             Exp memory borrowIndex = Exp({mantissa: oToken.borrowIndex()});
@@ -1243,10 +1242,10 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      * @param suppliers Whether or not to claim MATIC earned by supplying
      */
     function claimReward(uint8 rewardType, address payable[] memory holders, OToken[] memory oTokens, bool borrowers, bool suppliers) public payable {
-        require(rewardType <= 1, "rewardType is invalid");
+        require(rewardType <= 1, "rewardType invalid");
         for (uint i = 0; i < oTokens.length; i++) {
             OToken oToken = oTokens[i];
-            require(markets[address(oToken)].isListed, "market must be listed");
+            require(markets[address(oToken)].isListed, "market not listed");
             if (borrowers) {
                 Exp memory borrowIndex = Exp({mantissa: oToken.borrowIndex()});
                 updateRewardBorrowIndex(rewardType,address(oToken), borrowIndex);
@@ -1275,7 +1274,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
     function grantRewardInternal(uint rewardType, address payable user, uint amount) internal returns (uint) {
         if (amount > 0) {
             if (rewardType == 0) {
-                Ovix ovix = Ovix(oAddress);
+                IOvix ovix = IOvix(oAddress);
                 if (amount <= ovix.balanceOf(address(this))) {
                     ovix.transfer(user, amount);
                     return 0;
@@ -1300,8 +1299,8 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      */
     function _grantOvix(address payable recipient, uint amount) public {
         require(adminOrInitializing(), "only admin can grant ovix");
-        uint amountLeft = grantRewardInternal(0, recipient, amount);
-        require(amountLeft == 0, "insufficient ovix for grant");
+        //uint amountLeft = grantRewardInternal(0, recipient, amount);
+        require(grantRewardInternal(0, recipient, amount) == 0, "insufficient ovix for grant");
         emit OGranted(recipient, amount);
     }
 
@@ -1342,6 +1341,10 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      */
     function setBoosterManager(address newBoosterManager) public onlyAdmin {
         boostManager = IBoostManager(newBoosterManager);
+    }
+
+    function getBoostManager() external view returns(address) {
+        return address(boostManager);
     }
 
     /**
