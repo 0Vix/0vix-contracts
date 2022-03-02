@@ -382,9 +382,9 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         uint borrowCap = borrowCaps[oToken];
         // Borrow cap of 0 corresponds to unlimited borrowing
         if (borrowCap != 0) {
-            uint totalBorrows = OToken(oToken).totalBorrows();
-            uint nextTotalBorrows = add_(totalBorrows, borrowAmount);
-            require(nextTotalBorrows < borrowCap, "borrow cap reached");
+            // uint totalBorrows = OToken(oToken).totalBorrows();
+            // uint nextTotalBorrows = add_(totalBorrows, borrowAmount);
+            require(add_(OToken(oToken).totalBorrows(), borrowAmount) < borrowCap, "borrow cap reached");
         }
 
         (Error err, , uint shortfall) = getHypotheticalAccountLiquidityInternal(borrower, OToken(oToken), 0, borrowAmount);
@@ -396,7 +396,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         }
 
         // Keep the flywheel moving
-        updateAndDistributeBorrowerRewardsForToken(oToken, borrower, Exp({mantissa: OToken(oToken).borrowIndex()}));
+        updateAndDistributeBorrowerRewardsForToken(oToken, borrower);
 
         return uint(Error.NO_ERROR);
     }
@@ -442,7 +442,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         }
 
         // Keep the flywheel moving
-        updateAndDistributeBorrowerRewardsForToken(oToken, borrower, Exp({mantissa: OToken(oToken).borrowIndex()}));
+        updateAndDistributeBorrowerRewardsForToken(oToken, borrower);
 
         return uint(Error.NO_ERROR);
     }
@@ -1128,7 +1128,7 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      * @param oToken The market to verify the mint against
      * @param account The acount to whom 0VIX or MATIC is rewarded
      */
-    function updateAndDistributeSupplierRewardsForToken(address oToken, address account) internal {
+    function updateAndDistributeSupplierRewardsForToken(address oToken, address account) public {
         for (uint8 rewardType = 0; rewardType <= 1; rewardType++) {
             updateRewardSupplyIndex(rewardType, oToken);
             distributeSupplierReward(rewardType, oToken, account);
@@ -1166,7 +1166,8 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      * @param oToken The market to verify the mint against
      * @param borrower Borrower to be rewarded
      */
-    function updateAndDistributeBorrowerRewardsForToken(address oToken, address borrower, Exp memory marketBorrowIndex) internal {
+    function updateAndDistributeBorrowerRewardsForToken(address oToken, address borrower) public {
+        Exp memory marketBorrowIndex = Exp({mantissa: OToken(oToken).borrowIndex()});
         for (uint8 rewardType = 0; rewardType <= 1; rewardType++) {
             updateRewardBorrowIndex(rewardType, oToken, marketBorrowIndex);
             distributeBorrowerReward(rewardType, oToken, borrower, marketBorrowIndex);
@@ -1275,14 +1276,12 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
         if (amount > 0) {
             if (rewardType == 0) {
                 Ovix ovix = Ovix(oAddress);
-                uint oRemaining = ovix.balanceOf(address(this));
-                if (amount <= oRemaining) {
+                if (amount <= ovix.balanceOf(address(this))) {
                     ovix.transfer(user, amount);
                     return 0;
                 }
             } else if (rewardType == 1) {
-                uint ovixRemaining = address(this).balance;
-                if (amount <= ovixRemaining) {
+                if (amount <= address(this).balance) {
                     user.transfer(amount);
                     return 0;
                 }
@@ -1314,7 +1313,6 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      */
     function _setRewardSpeed(uint8 rewardType, OToken oToken, uint rewardSpeed) public {
         require(rewardType <= 1, "rewardType is invalid"); 
-        //require(msg.sender != address(0)); TODO: WTF
         require(adminOrInitializing() || msg.sender == rewardUpdater, "only admin");
         setRewardSpeedInternal(rewardType, oToken, rewardSpeed);
     }
@@ -1337,10 +1335,6 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
      */
     function setOAddress(address newOAddress) public onlyAdmin {
         oAddress = newOAddress;
-    }
-
-    function getBoostManager() external view returns(address) {
-        return address(boostManager);
     }
 
     /**
