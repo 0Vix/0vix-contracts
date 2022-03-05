@@ -3,7 +3,7 @@ pragma solidity 0.5.17;
 import "./OToken.sol";
 import "./PriceOracle.sol";
 
-import "./IBoostManager.sol";
+import "./interfaces/IBoostManager.sol";
 
 contract UnitrollerAdminStorage {
     /**
