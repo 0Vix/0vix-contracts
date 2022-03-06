@@ -1,4 +1,4 @@
-pragma solidity 0.5.17;
+pragma solidity 0.8.4;
 
 import "./OErc20.sol";
 
@@ -13,11 +13,13 @@ contract OErc20Delegate is OErc20, ODelegateInterface {
      */
     constructor() public {}
 
+    address public override implementation;
+
     /**
      * @notice Called by the delegator on a delegate to initialize it for duty
      * @param data The encoded bytes data for any initialization
      */
-    function _becomeImplementation(bytes memory data) public {
+    function _becomeImplementation(bytes memory data) public override {
         // Shh -- currently unused
         data;
 
@@ -32,7 +34,7 @@ contract OErc20Delegate is OErc20, ODelegateInterface {
     /**
      * @notice Called by the delegator on a delegate to forfeit its responsibility
      */
-    function _resignImplementation() public {
+    function _resignImplementation() public override {
         // Shh -- we don't ever want this hook to be marked pure
         if (false) {
             implementation = address(0);

@@ -1,4 +1,4 @@
-pragma solidity ^0.5.17;
+pragma solidity 0.8.4;
 
 import "./OToken.sol";
 
@@ -8,6 +8,10 @@ import "./OToken.sol";
  * @author 0VIX
  */
 contract OMatic is OToken {
+
+    bool public isInit = true;  // init lock, only proxy can run init
+    constructor() {}
+
     /**
      * @notice Construct a new OMatic money market
      * @param comptroller_ The address of the Comptroller
@@ -18,10 +22,6 @@ contract OMatic is OToken {
      * @param decimals_ ERC-20 decimal precision of this token
      * @param admin_ Address of the administrator of this token
      */
-
-    bool public isInit = true;  // init lock, only proxy can run init
-    constructor() public {}
-
     function init(
         ComptrollerInterface comptroller_,
         InterestRateModel interestRateModel_,
@@ -34,7 +34,7 @@ contract OMatic is OToken {
         require(!isInit,"init not possible");
         isInit = true;
         // Creator of the contract is admin during initialization
-        admin = msg.sender;
+        admin = payable(msg.sender);
 
         super.initialize(
             comptroller_,
@@ -138,7 +138,7 @@ contract OMatic is OToken {
     /**
      * @notice Send Matic to OMatic to mint
      */
-    function() external payable {
+    receive() external payable {
         (uint256 err, ) = mintInternal(msg.value);
         requireNoError(err, "mint failed");
     }
@@ -150,7 +150,7 @@ contract OMatic is OToken {
      * @dev This excludes the value of the current message, if any
      * @return The quantity of Matic owned by this contract
      */
-    function getCashPrior() internal view returns (uint256) {
+    function getCashPrior() internal view override returns (uint256) {
         (MathError err, uint256 startingBalance) = subUInt(
             address(this).balance,
             msg.value
@@ -166,7 +166,7 @@ contract OMatic is OToken {
      * @return The actual amount of Matic transferred
      */
     function doTransferIn(address from, uint256 amount)
-        internal
+        internal override
         returns (uint256)
     {
         // Sanity checks
@@ -175,7 +175,7 @@ contract OMatic is OToken {
         return amount;
     }
 
-    function doTransferOut(address payable to, uint256 amount) internal {
+    function doTransferOut(address payable to, uint256 amount) internal override {
         /* Send the Matic, with minimal gas and revert on failure */
         to.transfer(amount);
     }

@@ -1,133 +1,14 @@
-pragma solidity 0.5.17;
+pragma solidity 0.8.4;
 
 import "./ComptrollerInterface.sol";
 import "./InterestRateModel.sol";
 import "./EIP20NonStandardInterface.sol";
 
-contract OTokenStorage {
-    /**
-     * @dev Guard variable for re-entrancy checks
-     */
-    bool internal _notEntered;
-
-    /**
-     * @notice EIP-20 token name for this token
-     */
-    string public name;
-
-    /**
-     * @notice EIP-20 token symbol for this token
-     */
-    string public symbol;
-
-    /**
-     * @notice EIP-20 token decimals for this token
-     */
-    uint8 public decimals;
-
-    /**
-     * @notice Maximum borrow rate that can ever be applied (.0005% / block)
-     */
-
-    uint internal constant borrowRateMaxMantissa = 0.0005e16;
-
-    /**
-     * @notice Maximum fraction of interest that can be set aside for reserves
-     */
-    uint internal constant reserveFactorMaxMantissa = 1e18;
-
-    /**
-     * @notice Administrator for this contract
-     */
-    address payable public admin;
-
-    /**
-     * @notice Pending administrator for this contract
-     */
-    address payable public pendingAdmin;
-
-    /**
-     * @notice Contract which oversees inter-oToken operations
-     */
-    ComptrollerInterface public comptroller;
-
-    /**
-     * @notice Model which tells what the current interest rate should be
-     */
-    InterestRateModel public interestRateModel;
-
-    /**
-     * @notice Initial exchange rate used when minting the first OTokens (used when totalSupply = 0)
-     */
-    uint internal initialExchangeRateMantissa;
-
-    /**
-     * @notice Fraction of interest currently set aside for reserves
-     */
-    uint public reserveFactorMantissa;
-
-    /**
-     * @notice Block number that interest was last accrued at
-     */
-    uint public accrualBlockTimestamp;
-
-    /**
-     * @notice Accumulator of the total earned interest rate since the opening of the market
-     */
-    uint public borrowIndex;
-
-    /**
-     * @notice Total amount of outstanding borrows of the underlying in this market
-     */
-    uint public totalBorrows;
-
-    /**
-     * @notice Total amount of reserves of the underlying held in this market
-     */
-    uint public totalReserves;
-
-    /**
-     * @notice Total number of tokens in circulation
-     */
-    uint public totalSupply;
-
-    /**
-     * @notice Official record of token balances for each account
-     */
-    mapping (address => uint) internal accountTokens;
-
-    /**
-     * @notice Approved token transfer amounts on behalf of others
-     */
-    mapping (address => mapping (address => uint)) internal transferAllowances;
-
-    /**
-     * @notice Container for borrow balance information
-     * @member principal Total balance (with accrued interest), after applying the most recent balance-changing action
-     * @member interestIndex Global borrowIndex as of the most recent balance-changing action
-     */
-    struct BorrowSnapshot {
-        uint principal;
-        uint interestIndex;
-    }
-
-    /**
-     * @notice Mapping of account addresses to outstanding borrow balances
-     */
-    mapping(address => BorrowSnapshot) internal accountBorrows;
-
-    /**
-     * @notice Share of seized collateral that is added to reserves
-     */
-    uint public protocolSeizeShareMantissa;
-
-}
-
-contract OTokenInterface is OTokenStorage {
+interface OTokenInterface {
     /**
      * @notice Indicator that this is a OToken contract (for inspection)
      */
-    bool public constant isOToken = true;
+    function isOToken() external view  returns(bool);
 
 
     /*** Market Events ***/
@@ -215,11 +96,8 @@ contract OTokenInterface is OTokenStorage {
      */
     event Approval(address indexed owner, address indexed spender, uint amount);
 
-    /**
-     * @notice Failure event
-     */
-    event Failure(uint error, uint info, uint detail);
 
+    function accrualBlockTimestamp() external returns(uint256);
 
     /*** User Interface ***/
 
@@ -234,11 +112,11 @@ contract OTokenInterface is OTokenStorage {
     function supplyRatePerTimestamp() external view returns (uint);
     function totalBorrowsCurrent() external returns (uint);
     function borrowBalanceCurrent(address account) external returns (uint);
-    function borrowBalanceStored(address account) public view returns (uint);
-    function exchangeRateCurrent() public returns (uint);
-    function exchangeRateStored() public view returns (uint);
+    function borrowBalanceStored(address account) external view returns (uint);
+    function exchangeRateCurrent() external returns (uint);
+    function exchangeRateStored() external view returns (uint);
     function getCash() external view returns (uint);
-    function accrueInterest() public returns (uint);
+    function accrueInterest() external returns (uint);
     function seize(address liquidator, address borrower, uint seizeTokens) external returns (uint);
 
 
@@ -246,21 +124,135 @@ contract OTokenInterface is OTokenStorage {
 
     function _setPendingAdmin(address payable newPendingAdmin) external returns (uint);
     function _acceptAdmin() external returns (uint);
-    function _setComptroller(ComptrollerInterface newComptroller) public returns (uint);
+    function _setComptroller(ComptrollerInterface newComptroller) external returns (uint);
     function _setReserveFactor(uint newReserveFactorMantissa) external returns (uint);
     function _reduceReserves(uint reduceAmount) external returns (uint);
-    function _setInterestRateModel(InterestRateModel newInterestRateModel) public returns (uint);
+    function _setInterestRateModel(InterestRateModel newInterestRateModel) external returns (uint);
     function _setProtocolSeizeShare(uint newProtocolSeizeShareMantissa) external returns (uint);
 }
 
-contract OErc20Storage {
+abstract contract OTokenStorage is OTokenInterface {
+    bool public constant override isOToken = true;
+
     /**
-     * @notice Underlying asset for this OToken
+     * @dev Guard variable for re-entrancy checks
      */
-    address public underlying;
+    bool internal _notEntered;
+
+    /**
+     * @notice EIP-20 token name for this token
+     */
+    string public name;
+
+    /**
+     * @notice EIP-20 token symbol for this token
+     */
+    string public symbol;
+
+    /**
+     * @notice EIP-20 token decimals for this token
+     */
+    uint8 public decimals;
+
+    /**
+     * @notice Maximum borrow rate that can ever be applied (.0005% / block)
+     */
+
+    uint internal constant borrowRateMaxMantissa = 0.0005e16;
+
+    /**
+     * @notice Maximum fraction of interest that can be set aside for reserves
+     */
+    uint internal constant reserveFactorMaxMantissa = 1e18;
+
+    /**
+     * @notice Administrator for this contract
+     */
+    address payable public admin;
+
+    /**
+     * @notice Pending administrator for this contract
+     */
+    address payable public pendingAdmin;
+
+    /**
+     * @notice Contract which oversees inter-oToken operations
+     */
+    ComptrollerInterface public comptroller;
+
+    /**
+     * @notice Model which tells what the current interest rate should be
+     */
+    InterestRateModel public interestRateModel;
+
+    /**
+     * @notice Initial exchange rate used when minting the first OTokens (used when totalSupply = 0)
+     */
+    uint internal initialExchangeRateMantissa;
+
+    /**
+     * @notice Fraction of interest currently set aside for reserves
+     */
+    uint public reserveFactorMantissa;
+
+    /**
+     * @notice Block number that interest was last accrued at
+     */
+    uint public override accrualBlockTimestamp;
+
+    /**
+     * @notice Accumulator of the total earned interest rate since the opening of the market
+     */
+    uint public borrowIndex;
+
+    /**
+     * @notice Total amount of outstanding borrows of the underlying in this market
+     */
+    uint public totalBorrows;
+
+    /**
+     * @notice Total amount of reserves of the underlying held in this market
+     */
+    uint public totalReserves;
+
+    /**
+     * @notice Total number of tokens in circulation
+     */
+    uint public totalSupply;
+
+    /**
+     * @notice Official record of token balances for each account
+     */
+    mapping (address => uint) internal accountTokens;
+
+    /**
+     * @notice Approved token transfer amounts on behalf of others
+     */
+    mapping (address => mapping (address => uint)) internal transferAllowances;
+
+    /**
+     * @notice Container for borrow balance information
+     * @member principal Total balance (with accrued interest), after applying the most recent balance-changing action
+     * @member interestIndex Global borrowIndex as of the most recent balance-changing action
+     */
+    struct BorrowSnapshot {
+        uint principal;
+        uint interestIndex;
+    }
+
+    /**
+     * @notice Mapping of account addresses to outstanding borrow balances
+     */
+    mapping(address => BorrowSnapshot) internal accountBorrows;
+
+    /**
+     * @notice Share of seized collateral that is added to reserves
+     */
+    uint public protocolSeizeShareMantissa;
+
 }
 
-contract OErc20Interface is OErc20Storage {
+interface OErc20Interface {
 
     /*** User Interface ***/
 
@@ -279,14 +271,22 @@ contract OErc20Interface is OErc20Storage {
     function _addReserves(uint addAmount) external returns (uint);
 }
 
-contract ODelegationStorage {
+abstract contract OErc20Storage is OErc20Interface {
+    /**
+     * @notice Underlying asset for this OToken
+     */
+    address public underlying;
+}
+
+
+interface ODelegationStorage {
     /**
      * @notice Implementation address for this contract
      */
-    address public implementation;
+    function implementation() external returns(address);
 }
 
-contract ODelegatorInterface is ODelegationStorage {
+interface ODelegatorInterface is ODelegationStorage {
     /**
      * @notice Emitted when implementation is changed
      */
@@ -298,19 +298,19 @@ contract ODelegatorInterface is ODelegationStorage {
      * @param allowResign Flag to indicate whether to call _resignImplementation on the old implementation
      * @param becomeImplementationData The encoded bytes data to be passed to _becomeImplementation
      */
-    function _setImplementation(address implementation_, bool allowResign, bytes memory becomeImplementationData) public;
+    function _setImplementation(address implementation_, bool allowResign, bytes memory becomeImplementationData) external;
 }
 
-contract ODelegateInterface is ODelegationStorage {
+interface ODelegateInterface is ODelegationStorage {
     /**
      * @notice Called by the delegator on a delegate to initialize it for duty
      * @dev Should revert if any issues arise which make it unfit for delegation
      * @param data The encoded bytes data for any initialization
      */
-    function _becomeImplementation(bytes memory data) public;
+    function _becomeImplementation(bytes memory data) external;
 
     /**
      * @notice Called by the delegator on a delegate to forfeit its responsibility
      */
-    function _resignImplementation() public;
+    function _resignImplementation() external;
 }

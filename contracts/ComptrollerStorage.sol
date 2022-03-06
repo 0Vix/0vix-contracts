@@ -1,8 +1,9 @@
-pragma solidity ^0.5.16;
+pragma solidity 0.8.4;
 
 import "./OToken.sol";
 import "./PriceOracle.sol";
-import "./interfaces/IBoostManager.sol";
+
+import "./IBoostManager.sol";
 
 contract UnitrollerAdminStorage {
     /**
@@ -26,7 +27,7 @@ contract UnitrollerAdminStorage {
     address public pendingComptrollerImplementation;
 }
 
-contract ComptrollerV1Storage is UnitrollerAdminStorage {
+contract ComptrollerVXStorage is UnitrollerAdminStorage {
 
     /**
      * @notice Oracle which gives the price of any given asset
@@ -53,12 +54,15 @@ contract ComptrollerV1Storage is UnitrollerAdminStorage {
      */
     mapping(address => OToken[]) public accountAssets;
 
-}
+    /// @notice Per-market mapping of "accounts in this asset"
+    mapping(address => mapping(address => bool)) public accountMembership;
 
-contract ComptrollerV2Storage is ComptrollerV1Storage {
     struct Market {
         /// @notice Whether or not this market is listed
         bool isListed;
+
+        /// @notice Whether or not this market receives 0VIX
+        bool isOed;
 
         /**
          * @notice Multiplier representing the most one can borrow against their collateral in this market.
@@ -66,12 +70,6 @@ contract ComptrollerV2Storage is ComptrollerV1Storage {
          *  Must be between 0 and 1, and stored as a mantissa.
          */
         uint collateralFactorMantissa;
-
-        /// @notice Per-market mapping of "accounts in this asset"
-        mapping(address => bool) accountMembership;
-
-        /// @notice Whether or not this market receives COMP
-        bool isComped;
     }
 
     /**
@@ -91,74 +89,54 @@ contract ComptrollerV2Storage is ComptrollerV1Storage {
     bool public _borrowGuardianPaused;
     bool public transferGuardianPaused;
     bool public seizeGuardianPaused;
-    mapping(address => bool) public mintGuardianPaused;
-    mapping(address => bool) public borrowGuardianPaused;
-}
 
-contract ComptrollerV3Storage is ComptrollerV2Storage {
-    struct CompMarketState {
-        /// @notice The market's last updated compBorrowIndex or compSupplyIndex
-        uint224 index;
-
-        /// @notice The timestamp the index was last updated at
-        uint32 timestamp;
+    struct PauseData {
+        bool mint;
+        bool borrow;
     }
+
+    mapping(address => PauseData) public guardianPaused;
 
     /// @notice A list of all markets
     OToken[] public allMarkets;
 
-    /// @notice The rate at which the flywheel distributes COMP, per second
-    uint public compRate;
-
-    /// @notice The portion of compRate that each market currently receives
-    mapping(address => uint) public compSpeeds;
-
-    /// @notice The COMP market supply state for each market
-    mapping(address => CompMarketState) public compSupplyState;
-
-    /// @notice The COMP market borrow state for each market
-    mapping(address => CompMarketState) public compBorrowState;
-
-    /// @notice The COMP borrow index for each market for each supplier as of the last time they accrued COMP
-    mapping(address => mapping(address => uint)) public compSupplierIndex;
-
-    /// @notice The COMP borrow index for each market for each borrower as of the last time they accrued COMP
-    mapping(address => mapping(address => uint)) public compBorrowerIndex;
-
-    /// @notice The COMP accrued but not yet transferred to each user
-    mapping(address => uint) public compAccrued;
-}
-
-contract ComptrollerV4Storage is ComptrollerV3Storage {
     // @notice The borrowCapGuardian can set borrowCaps to any number for any market. Lowering the borrow cap could disable borrowing on the given market.
     address public borrowCapGuardian;
 
     // @notice Borrow caps enforced by borrowAllowed for each oToken address. Defaults to zero which corresponds to unlimited borrowing.
     mapping(address => uint) public borrowCaps;
-}
 
-contract ComptrollerV5Storage is ComptrollerV4Storage {
-    /// @notice The portion of COMP that each contributor receives per second
-    mapping(address => uint) public compContributorSpeeds;
+    struct RewardMarketState {
+        /// @notice The market's last updated rewardBorrowIndex or rewardSupplyIndex
+        uint224 index;
 
-    /// @notice Last timestamp at which a contributor's COMP rewards have been allocated
-    mapping(address => uint) public lastContributorTimestamp;
-}
+        /// @notice The block timestamp the index was last updated at
+        uint32 timestamp;
+    }
 
-contract ComptrollerV6Storage is ComptrollerV5Storage {
-    /// @notice The rate at which comp is distributed to the corresponding borrow market (per second)
-    mapping(address => uint) public compBorrowSpeeds;
+    /// @notice The rate at which the flywheel distributes reward, per timestamp
+    mapping(uint8 => uint) rewardRate;
 
-    /// @notice The rate at which comp is distributed to the corresponding supply market (per second)
-    mapping(address => uint) public compSupplySpeeds;
-}
+    /// @notice The portion of reward rate that each market currently receives
+    mapping(uint8 => mapping(address => uint)) public rewardSpeeds;
 
-contract ComptrollerV7Storage is ComptrollerV6Storage {
-    /// @notice Flag indicating whether the function to fix COMP accruals has been executed (RE: proposal 62 bug)
-    bool public proposal65FixExecuted;
+    /// @notice The O/MATIC market supply state for each market
+    mapping(uint8 => mapping(address => RewardMarketState)) public rewardSupplyState;
 
-    /// @notice Accounting storage mapping account addresses to how much COMP they owe the protocol.
-    mapping(address => uint) public compReceivable;
+    /// @notice The O/MATIC market borrow state for each market
+    mapping(uint8 =>mapping(address => RewardMarketState)) public rewardBorrowState;
+
+    /// @notice The O/MATIC borrow index for each market for each supplier as of the last time they accrued reward
+    mapping(uint8 => mapping(address => mapping(address => uint))) public rewardSupplierIndex;
+
+    /// @notice The O/MATIC borrow index for each market for each borrower as of the last time they accrued reward
+    mapping(uint8 => mapping(address => mapping(address => uint))) public rewardBorrowerIndex;
+
+    /// @notice The O/MATIC accrued but not yet transferred to each user
+    mapping(uint8 => mapping(address => uint)) public rewardAccrued;
+
+    /// @notice O token contract address
+    address public oAddress;
 
     IBoostManager public boostManager;
 }

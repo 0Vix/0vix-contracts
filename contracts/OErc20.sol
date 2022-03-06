@@ -1,4 +1,4 @@
-pragma solidity 0.5.17;
+pragma solidity 0.8.4;
 
 import "./OToken.sol";
 
@@ -7,7 +7,11 @@ import "./OToken.sol";
  * @notice OTokens which wrap an EIP-20 underlying
  * @author 0VIX
  */
-contract OErc20 is OToken, OErc20Interface {
+contract OErc20 is OToken, OErc20Storage {
+    bool isInit = true;
+
+    constructor() public {}
+
     /**
      * @notice Initialize the new money market
      * @param underlying_ The address of the underlying asset
@@ -18,10 +22,6 @@ contract OErc20 is OToken, OErc20Interface {
      * @param symbol_ ERC-20 symbol of this token
      * @param decimals_ ERC-20 decimal precision of this token
      */
-    bool isInit = true;
-
-    constructor() public {}
-
     function init(
         address underlying_,
         ComptrollerInterface comptroller_,
@@ -34,7 +34,7 @@ contract OErc20 is OToken, OErc20Interface {
         // OToken initialize does the bulk of the work
         require(!isInit, "contract already initialized");
         isInit = true;
-        admin = msg.sender;
+        admin = payable(msg.sender);
         super.initialize(
             comptroller_,
             interestRateModel_,
@@ -57,7 +57,7 @@ contract OErc20 is OToken, OErc20Interface {
      * @param mintAmount The amount of the underlying asset to supply
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function mint(uint256 mintAmount) external returns (uint256) {
+    function mint(uint256 mintAmount) external override returns (uint256) {
         (uint256 err, ) = mintInternal(mintAmount);
         return err;
     }
@@ -68,7 +68,7 @@ contract OErc20 is OToken, OErc20Interface {
      * @param redeemTokens The number of oTokens to redeem into underlying
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function redeem(uint256 redeemTokens) external returns (uint256) {
+    function redeem(uint256 redeemTokens) external override returns (uint256) {
         return redeemInternal(redeemTokens);
     }
 
@@ -78,7 +78,7 @@ contract OErc20 is OToken, OErc20Interface {
      * @param redeemAmount The amount of underlying to redeem
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function redeemUnderlying(uint256 redeemAmount) external returns (uint256) {
+    function redeemUnderlying(uint256 redeemAmount) external override returns (uint256) {
         return redeemUnderlyingInternal(redeemAmount);
     }
 
@@ -87,7 +87,7 @@ contract OErc20 is OToken, OErc20Interface {
      * @param borrowAmount The amount of the underlying asset to borrow
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function borrow(uint256 borrowAmount) external returns (uint256) {
+    function borrow(uint256 borrowAmount) external override returns (uint256) {
         return borrowInternal(borrowAmount);
     }
 
@@ -96,7 +96,7 @@ contract OErc20 is OToken, OErc20Interface {
      * @param repayAmount The amount to repay
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function repayBorrow(uint256 repayAmount) external returns (uint256) {
+    function repayBorrow(uint256 repayAmount) external override returns (uint256) {
         (uint256 err, ) = repayBorrowInternal(repayAmount);
         return err;
     }
@@ -108,7 +108,7 @@ contract OErc20 is OToken, OErc20Interface {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function repayBorrowBehalf(address borrower, uint256 repayAmount)
-        external
+        external override
         returns (uint256)
     {
         (uint256 err, ) = repayBorrowBehalfInternal(borrower, repayAmount);
@@ -127,7 +127,7 @@ contract OErc20 is OToken, OErc20Interface {
         address borrower,
         uint256 repayAmount,
         OTokenInterface oTokenCollateral
-    ) external returns (uint256) {
+    ) external override returns (uint256) {
         (uint256 err, ) = liquidateBorrowInternal(
             borrower,
             repayAmount,
@@ -140,7 +140,7 @@ contract OErc20 is OToken, OErc20Interface {
      * @notice A public function to sweep accidental ERC-20 transfers to this contract. Tokens are sent to admin (timelock)
      * @param token The address of the ERC-20 token to sweep
      */
-    function sweepToken(EIP20NonStandardInterface token) external {
+    function sweepToken(EIP20NonStandardInterface token) external override {
         require(
             address(token) != underlying,
             "OErc20::sweepToken: can not sweep underlying token"
@@ -154,7 +154,7 @@ contract OErc20 is OToken, OErc20Interface {
      * @param addAmount The amount fo underlying token to add as reserves
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function _addReserves(uint256 addAmount) external returns (uint256) {
+    function _addReserves(uint256 addAmount) external override returns (uint256) {
         return _addReservesInternal(addAmount);
     }
 
@@ -165,7 +165,7 @@ contract OErc20 is OToken, OErc20Interface {
      * @dev This excludes the value of the current message, if any
      * @return The quantity of underlying tokens owned by this contract
      */
-    function getCashPrior() internal view returns (uint256) {
+    function getCashPrior() internal override view returns (uint256) {
         EIP20Interface token = EIP20Interface(underlying);
         return token.balanceOf(address(this));
     }
@@ -180,7 +180,7 @@ contract OErc20 is OToken, OErc20Interface {
      *            See here: https://medium.com/coinmonks/missing-return-value-bug-at-least-130-tokens-affected-d67bf08521ca
      */
     function doTransferIn(address from, uint256 amount)
-        internal
+        internal override
         returns (uint256)
     {
         EIP20NonStandardInterface token = EIP20NonStandardInterface(underlying);
@@ -225,7 +225,7 @@ contract OErc20 is OToken, OErc20Interface {
      *      Note: This wrapper safely handles non-standard ERC-20 tokens that do not return a value.
      *            See here: https://medium.com/coinmonks/missing-return-value-bug-at-least-130-tokens-affected-d67bf08521ca
      */
-    function doTransferOut(address payable to, uint256 amount) internal {
+    function doTransferOut(address payable to, uint256 amount) internal override {
         EIP20NonStandardInterface token = EIP20NonStandardInterface(underlying);
         token.transfer(to, amount);
 

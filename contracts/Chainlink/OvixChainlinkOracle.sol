@@ -1,4 +1,4 @@
-pragma solidity 0.5.17;
+pragma solidity 0.8.4;
 
 import "../PriceOracle.sol";
 import "../OErc20.sol";
@@ -20,7 +20,7 @@ contract OvixChainlinkOracle is PriceOracle {
         admin = msg.sender;
     }
 
-    function getUnderlyingPrice(OToken oToken) public view returns (uint) {
+    function getUnderlyingPrice(OToken oToken) public override view returns (uint) {
         string memory symbol = oToken.symbol();
         if (compareStrings(symbol, "oMATIC")) {
             return getChainlinkPrice(getFeed(symbol));

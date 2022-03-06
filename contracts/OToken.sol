@@ -1,4 +1,4 @@
-pragma solidity 0.5.17;
+pragma solidity 0.8.4;
 
 import "./ComptrollerInterface.sol";
 import "./OTokenInterfaces.sol";
@@ -6,14 +6,14 @@ import "./ErrorReporter.sol";
 import "./Exponential.sol";
 import "./EIP20Interface.sol";
 import "./InterestRateModel.sol";
-import "./interfaces/IBoostManager.sol";
+import "./IBoostManager.sol";
 
 /**
  * @title 0VIX's OToken Contract
  * @notice Abstract base for OTokens
  * @author 0VIX
  */
-contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
+abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
     /**
      * @notice Initialize the money market
      * @param comptroller_ The address of the Comptroller
@@ -146,7 +146,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
         /* Get the allowance, infinite for the account owner */
         uint256 startingAllowance = 0;
         if (spender == src) {
-            startingAllowance = uint256(-1);
+            startingAllowance = type(uint256).max;
         } else {
             startingAllowance = transferAllowances[src][spender];
         }
@@ -183,7 +183,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
         accountTokens[dst] = dstTokensNew;
 
         /* Eat some of the allowance (if necessary) */
-        if (startingAllowance != uint256(-1)) {
+        if (startingAllowance != type(uint256).max) {
             transferAllowances[src][spender] = allowanceNew;
         }
 
@@ -204,6 +204,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      */
     function transfer(address dst, uint256 amount)
         external
+        override
         nonReentrant
         returns (bool)
     {
@@ -223,7 +224,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
         address src,
         address dst,
         uint256 amount
-    ) external nonReentrant returns (bool) {
+    ) external override nonReentrant returns (bool) {
         return
             transferTokens(msg.sender, src, dst, amount) ==
             uint256(Error.NO_ERROR);
@@ -237,7 +238,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @param amount The number of tokens that are approved (-1 means infinite)
      * @return Whether or not the approval succeeded
      */
-    function approve(address spender, uint256 amount) external returns (bool) {
+    function approve(address spender, uint256 amount) external override returns (bool) {
         address src = msg.sender;
         transferAllowances[src][spender] = amount;
         emit Approval(src, spender, amount);
@@ -251,7 +252,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @return The number of tokens allowed to be spent (-1 means infinite)
      */
     function allowance(address owner, address spender)
-        external
+        external override
         view
         returns (uint256)
     {
@@ -263,7 +264,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @param owner The address of the account to query
      * @return The number of tokens owned by `owner`
      */
-    function balanceOf(address owner) external view returns (uint256) {
+    function balanceOf(address owner) external override view returns (uint256) {
         return accountTokens[owner];
     }
 
@@ -273,7 +274,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @param owner The address of the account to query
      * @return The amount of underlying owned by `owner`
      */
-    function balanceOfUnderlying(address owner) external returns (uint256) {
+    function balanceOfUnderlying(address owner) external override returns (uint256) {
         Exp memory exchangeRate = Exp({mantissa: exchangeRateCurrent()});
         (MathError mErr, uint256 balance) = mulScalarTruncate(
             exchangeRate,
@@ -290,7 +291,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @return (possible error, token balance, borrow balance, exchange rate mantissa)
      */
     function getAccountSnapshot(address account)
-        external
+        external override
         view
         returns (
             uint256,
@@ -335,7 +336,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @notice Returns the current per-timestamp borrow interest rate for this oToken
      * @return The borrow interest rate per timestmp, scaled by 1e18
      */
-    function borrowRatePerTimestamp() external view returns (uint256) {
+    function borrowRatePerTimestamp() external override view returns (uint256) {
         return
             interestRateModel.getBorrowRate(
                 getCashPrior(),
@@ -348,7 +349,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @notice Returns the current per-timestamp supply interest rate for this oToken
      * @return The supply interest rate per timestmp, scaled by 1e18
      */
-    function supplyRatePerTimestamp() external view returns (uint256) {
+    function supplyRatePerTimestamp() external override view returns (uint256) {
         return
             interestRateModel.getSupplyRate(
                 getCashPrior(),
@@ -362,7 +363,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @notice Returns the current total borrows plus accrued interest
      * @return The total borrows with interest
      */
-    function totalBorrowsCurrent() external nonReentrant returns (uint256) {
+    function totalBorrowsCurrent() external override nonReentrant returns (uint256) {
         require(
             accrueInterest() == uint256(Error.NO_ERROR),
             "accrue interest failed"
@@ -376,7 +377,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @return The calculated balance
      */
     function borrowBalanceCurrent(address account)
-        external
+        external override
         nonReentrant
         returns (uint256)
     {
@@ -393,7 +394,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @return The calculated balance
      */
     function borrowBalanceStored(address account)
-        public
+        public override
         view
         returns (uint256)
     {
@@ -456,7 +457,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @notice Accrue interest then return the up-to-date exchange rate
      * @return Calculated exchange rate scaled by 1e18
      */
-    function exchangeRateCurrent() public nonReentrant returns (uint256) {
+    function exchangeRateCurrent() public override nonReentrant returns (uint256) {
         require(
             accrueInterest() == uint256(Error.NO_ERROR),
             "accrue interest failed"
@@ -469,7 +470,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @dev This function does not accrue interest before calculating the exchange rate
      * @return Calculated exchange rate scaled by 1e18
      */
-    function exchangeRateStored() public view returns (uint256) {
+    function exchangeRateStored() public override view returns (uint256) {
         (MathError err, uint256 result) = exchangeRateStoredInternal();
         require(
             err == MathError.NO_ERROR,
@@ -530,7 +531,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @notice Get cash balance of this oToken in the underlying asset
      * @return The quantity of underlying asset owned by this contract
      */
-    function getCash() external view returns (uint256) {
+    function getCash() external override view returns (uint256) {
         return getCashPrior();
     }
 
@@ -539,7 +540,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @dev This calculates interest accrued from the last checkpointed block
      *   up to the current block and writes new checkpoint to storage.
      */
-    function accrueInterest() public returns (uint256) {
+    function accrueInterest() public override returns (uint256) {
         /* Remember the initial block timestamp */
         uint256 currentBlockTimestamp = getBlockTimestamp();
         uint256 accrualBlockTimestampPrior = accrualBlockTimestamp;
@@ -857,7 +858,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
                 fail(Error(error), FailureInfo.REDEEM_ACCRUE_INTEREST_FAILED);
         }
         // redeemFresh emits redeem-specific logs on errors, so we don't need to
-        return redeemFresh(msg.sender, redeemTokens, 0);
+        return redeemFresh(payable(msg.sender), redeemTokens, 0);
     }
 
     /**
@@ -878,7 +879,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
                 fail(Error(error), FailureInfo.REDEEM_ACCRUE_INTEREST_FAILED);
         }
         // redeemFresh emits redeem-specific logs on errors, so we don't need to
-        return redeemFresh(msg.sender, 0, redeemAmount);
+        return redeemFresh(payable(msg.sender), 0, redeemAmount);
     }
 
     struct RedeemLocalVars {
@@ -932,7 +933,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
              *  redeemTokens = redeemTokensIn
              *  redeemAmount = redeemTokensIn x exchangeRateCurrent
              */
-            if (redeemTokensIn == uint256(-1)) {
+            if (redeemTokensIn == type(uint256).max) {
                 vars.redeemTokens = accountTokens[redeemer];
             } else {
                 vars.redeemTokens = redeemTokensIn;
@@ -956,7 +957,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
              *  redeemTokens = redeemAmountIn / exchangeRate
              *  redeemAmount = redeemAmountIn
              */
-            if (redeemAmountIn == uint256(-1)) {
+            if (redeemAmountIn == type(uint256).max) {
                 vars.redeemTokens = accountTokens[redeemer];
 
                 (vars.mathErr, vars.redeemAmount) = mulScalarTruncate(
@@ -1108,7 +1109,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
                 fail(Error(error), FailureInfo.BORROW_ACCRUE_INTEREST_FAILED);
         }
         // borrowFresh emits borrow-specific logs on errors, so we don't need to
-        return borrowFresh(msg.sender, borrowAmount);
+        return borrowFresh(payable(msg.sender), borrowAmount);
     }
 
     struct BorrowLocalVars {
@@ -1371,7 +1372,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
         }
 
         /* If repayAmount == -1, repayAmount = accountBorrows */
-        if (repayAmount == uint256(-1)) {
+        if (repayAmount == type(uint256).max) {
             vars.repayAmount = vars.accountBorrows;
         } else {
             vars.repayAmount = repayAmount;
@@ -1565,7 +1566,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
         }
 
         /* Fail if repayAmount = -1 */
-        if (repayAmount == uint256(-1)) {
+        if (repayAmount == type(uint256).max) {
             return (
                 fail(
                     Error.INVALID_CLOSE_AMOUNT_REQUESTED,
@@ -1661,7 +1662,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
         address liquidator,
         address borrower,
         uint256 seizeTokens
-    ) external nonReentrant returns (uint256) {
+    ) external override nonReentrant returns (uint256) {
         return seizeInternal(msg.sender, liquidator, borrower, seizeTokens);
     }
 
@@ -1817,7 +1818,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function _setPendingAdmin(address payable newPendingAdmin)
-        external
+        external override
         returns (uint256)
     {
         // Check caller = admin
@@ -1846,7 +1847,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @dev Admin function for pending admin to accept role and update admin
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function _acceptAdmin() external returns (uint256) {
+    function _acceptAdmin() external override returns (uint256) {
         // Check caller is pendingAdmin and pendingAdmin ≠ address(0)
         if (msg.sender != pendingAdmin || msg.sender == address(0)) {
             return
@@ -1864,7 +1865,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
         admin = pendingAdmin;
 
         // Clear the pending value
-        pendingAdmin = address(0);
+        pendingAdmin = payable(address(0));
 
         emit NewAdmin(oldAdmin, admin);
         emit NewPendingAdmin(oldPendingAdmin, pendingAdmin);
@@ -1878,7 +1879,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function _setComptroller(ComptrollerInterface newComptroller)
-        public
+        public override
         returns (uint256)
     {
         // Check caller is admin
@@ -1909,7 +1910,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function _setReserveFactor(uint256 newReserveFactorMantissa)
-        external
+        external override
         nonReentrant
         returns (uint256)
     {
@@ -2061,7 +2062,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function _reduceReserves(uint256 reduceAmount)
-        external
+        external override
         nonReentrant
         returns (uint256)
     {
@@ -2153,7 +2154,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function _setInterestRateModel(InterestRateModel newInterestRateModel)
-        public
+        public override
         returns (uint256)
     {
         uint256 error = accrueInterest();
@@ -2228,7 +2229,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function _setProtocolSeizeShare(uint256 newProtocolSeizeShareMantissa)
-        external
+        external override
         nonReentrant
         returns (uint256)
     {
@@ -2298,14 +2299,14 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      * @dev This excludes the value of the current message, if any
      * @return The quantity of underlying owned by this contract
      */
-    function getCashPrior() internal view returns (uint256);
+    function getCashPrior() internal virtual view returns (uint256);
 
     /**
      * @dev Performs a transfer in, reverting upon failure. Returns the amount actually transferred to the protocol, in case of a fee.
      *  This may revert due to insufficient balance or insufficient allowance.
      */
     function doTransferIn(address from, uint256 amount)
-        internal
+        internal virtual
         returns (uint256);
 
     /**
@@ -2313,7 +2314,7 @@ contract OToken is OTokenInterface, Exponential, TokenErrorReporter {
      *  If caller has not called checked protocol's balance, may revert due to insufficient cash held in the contract.
      *  If caller has checked protocol's balance, and verified it is >= amount, this should not revert in normal conditions.
      */
-    function doTransferOut(address payable to, uint256 amount) internal;
+    function doTransferOut(address payable to, uint256 amount) internal virtual;
 
     /*** Reentrancy Guard ***/
 

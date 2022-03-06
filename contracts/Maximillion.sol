@@ -1,4 +1,4 @@
-pragma solidity 0.5.17;
+pragma solidity 0.8.4;
 
 import "./OMatic.sol";
 
@@ -38,10 +38,10 @@ contract Maximillion {
         uint received = msg.value;
         uint borrows = oMatic_.borrowBalanceCurrent(borrower);
         if (received > borrows) {
-            oMatic_.repayBorrowBehalf.value(borrows)(borrower);
-            msg.sender.transfer(received - borrows);
+            oMatic_.repayBorrowBehalf{value: borrows}(borrower);
+            payable(msg.sender).transfer(received - borrows);
         } else {
-            oMatic_.repayBorrowBehalf.value(received)(borrower);
+            oMatic_.repayBorrowBehalf{value: received}(borrower);
         }
     }
 }

@@ -1,5 +1,5 @@
-pragma solidity ^0.5.16;
-pragma experimental ABIEncoderV2;
+pragma solidity 0.8.4;
+pragma abicoder v2;
 
 contract Ovix {
     /// @notice EIP-20 token name for this token
@@ -63,7 +63,7 @@ contract Ovix {
      * @notice Construct a new O token
      * @param account The initial account to grant all the tokens
      */
-    constructor(address account) public {
+    constructor(address account) {
         balances[account] = uint96(totalSupply);
         emit Transfer(address(0), account, totalSupply);
     }
@@ -88,8 +88,8 @@ contract Ovix {
      */
     function approve(address spender, uint rawAmount) external returns (bool) {
         uint96 amount;
-        if (rawAmount == uint(-1)) {
-            amount = uint96(-1);
+        if (rawAmount == type(uint).max) {
+            amount = type(uint96).max;
         } else {
             amount = safe96(rawAmount, "O::approve: amount exceeds 96 bits");
         }
@@ -112,8 +112,8 @@ contract Ovix {
      */
     function permit(address owner, address spender, uint rawAmount, uint deadline, uint8 v, bytes32 r, bytes32 s) external {
         uint96 amount;
-        if (rawAmount == uint(-1)) {
-            amount = uint96(-1);
+        if (rawAmount == type(uint).max) {
+            amount = type(uint96).max;
         } else {
             amount = safe96(rawAmount, "O::permit: amount exceeds 96 bits");
         }
@@ -124,7 +124,7 @@ contract Ovix {
         address signatory = ecrecover(digest, v, r, s);
         require(signatory != address(0), "O::permit: invalid signature");
         require(signatory == owner, "O::permit: unauthorized");
-        require(now <= deadline, "O::permit: signature expired");
+        require(block.timestamp <= deadline, "O::permit: signature expired");
 
         allowances[owner][spender] = amount;
 
@@ -164,7 +164,7 @@ contract Ovix {
         uint96 spenderAllowance = allowances[src][spender];
         uint96 amount = safe96(rawAmount, "O::approve: amount exceeds 96 bits");
 
-        if (spender != src && spenderAllowance != uint96(-1)) {
+        if (spender != src && spenderAllowance != type(uint96).max) {
             uint96 newAllowance = sub96(spenderAllowance, amount, "O::transferFrom: transfer amount exceeds spender allowance");
             allowances[src][spender] = newAllowance;
 
@@ -199,7 +199,7 @@ contract Ovix {
         address signatory = ecrecover(digest, v, r, s);
         require(signatory != address(0), "O::delegateBySig: invalid signature");
         require(nonce == nonces[signatory]++, "O::delegateBySig: invalid nonce");
-        require(now <= expiry, "O::delegateBySig: signature expired");
+        require(block.timestamp <= expiry, "O::delegateBySig: signature expired");
         return _delegate(signatory, delegatee);
     }
 
@@ -327,7 +327,7 @@ contract Ovix {
         return a - b;
     }
 
-    function getChainId() internal pure returns (uint) {
+    function getChainId() internal view returns (uint) {
         uint256 chainId;
         assembly { chainId := chainid() }
         return chainId;

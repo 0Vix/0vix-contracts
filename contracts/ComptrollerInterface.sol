@@ -1,8 +1,8 @@
-pragma solidity 0.5.17;
+pragma solidity 0.8.4;
 
-contract ComptrollerInterface {
+interface ComptrollerInterface {
     /// @notice Indicator that this is a Comptroller contract (for inspection)
-    bool public constant isComptroller = true;
+    function isComptroller() external view returns(bool);
 
     /*** Assets You Are In ***/
 
