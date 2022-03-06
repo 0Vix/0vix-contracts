@@ -4,29 +4,15 @@ pragma solidity =0.8.4;
 import "../openzeppelin@4.5.0/Ownable.sol";
 import "../openzeppelin@4.5.0/token/ERC20/IERC20.sol";
 import "../interfaces/IoToken.sol";
+import "./IComptroller.sol";
 
-interface Comptroller {
-    function isMarket(address) external view returns (bool);
-
-    function updateAndDistributeSupplierRewardsForToken(
-        address oToken,
-        address account
-    ) external;
-
-    function updateAndDistributeBorrowerRewardsForToken(
-        address oToken,
-        address borrower
-    ) external;
-
-    function getAllMarkets() external view returns (address[] memory);
-}
 
 contract BoostManager is Ownable {
     bool public init = true; //todo set to true when using proxy
     uint256 private constant MULTIPLIER = 10**18;
 
     IERC20 public veOVIX;
-    Comptroller public comptroller;
+    IComptroller public comptroller;
 
     mapping(address => bool) public authorized;
     // market => user => supply boostBasis
@@ -41,7 +27,7 @@ contract BoostManager is Ownable {
 
     constructor() {}
 
-    function initialize(IERC20 ve, Comptroller _comptroller, address _owner) external {
+    function initialize(IERC20 ve, IComptroller _comptroller, address _owner) external {
         require(!init, "contract already initialized");
         init = true;
         veOVIX = ve;

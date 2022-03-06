@@ -2,18 +2,10 @@
 pragma solidity =0.8.4;
 
 import "../interfaces/IVotingEscrow.sol";
-import "../IBoostManager@0.8.4.sol";
+import { IBoostManager450 as IBoostManager } from "../IBoostManager@0.8.4.sol";
 import "../openzeppelin@4.5.0/utils/structs/EnumerableSet.sol";
+import "./IComptroller.sol";
 
-interface IComptroller {
-    function _setRewardSpeed(
-        uint8 rewardType,
-        address oToken,
-        uint256 rewardSpeed
-    ) external;
-
-    function isMarket(address market) external view returns (bool); // todo: needs to be added to comptroller
-}
 
 /**
  * @title Vote Controller

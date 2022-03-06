@@ -1339,8 +1339,8 @@ contract Comptroller is ComptrollerVXStorage, ComptrollerInterface, ComptrollerE
     /**
      * @notice Set the booster manager address
      */
-    function setBoosterManager(address newBoosterManager) public onlyAdmin {
-        boostManager = IBoostManager(newBoosterManager);
+    function setBoostManager(address newBoostManager) public onlyAdmin {
+        boostManager = IBoostManager(newBoostManager);
     }
 
     function getBoostManager() external view returns(address) {

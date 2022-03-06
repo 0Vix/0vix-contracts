@@ -3,7 +3,7 @@ pragma solidity =0.8.4;
 
 import "./openzeppelin@4.5.0/token/ERC20/IERC20.sol";
 
-interface IBoostManager {
+interface IBoostManager450 {
     function updateBoostBasis(address user)
         external
         returns (bool);
