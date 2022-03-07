@@ -2,7 +2,7 @@ pragma solidity 0.8.4;
 
 import "./otokens/interfaces/IOToken.sol";
 import "./PriceOracle.sol";
-import "./interfaces/IBoostManager.sol";
+import "./vote-escrow/interfaces/IBoostManager.sol";
 
 import "./UnitrollerAdminStorage.sol";
 

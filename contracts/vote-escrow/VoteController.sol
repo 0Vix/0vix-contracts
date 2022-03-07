@@ -2,8 +2,9 @@
 pragma solidity =0.8.4;
 
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import "../interfaces/IVotingEscrow.sol";
-import "../interfaces/IBoostManager.sol";
+import "./interfaces/IVotingEscrow.sol";
+import "./interfaces/IBoostManager.sol";
+
 import "../interfaces/IComptroller.sol";
 
 

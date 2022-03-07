@@ -7,7 +7,7 @@ import "../../libraries/ErrorReporter.sol";
 import "../../libraries/Exponential.sol";
 import "../interfaces/IEIP20.sol";
 import "../../interest-rate-models/interfaces/IInterestRateModel.sol";
-import "../../interfaces/IBoostManager.sol";
+import "../../vote-escrow/interfaces/IBoostManager.sol";
 
 /**
  * @title 0VIX's OToken Contract
