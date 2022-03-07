@@ -72,13 +72,13 @@ contract ExponentialNoError {
         return value.mantissa == 0;
     }
 
-    function safe224(uint n, string memory errorMessage) pure internal returns (uint224) {
-        require(n < 2**224, errorMessage);
+    function safe224(uint n) pure internal returns (uint224) {
+        require(n < 2**224, "safe224 overflow");
         return uint224(n);
     }
 
-    function safe32(uint n, string memory errorMessage) pure internal returns (uint32) {
-        require(n < 2**32, errorMessage);
+    function safe32(uint n) pure internal returns (uint32) {
+        require(n < 2**32, "safe32 overflow");
         return uint32(n);
     }
 
@@ -91,7 +91,9 @@ contract ExponentialNoError {
     }
 
     function add_(uint a, uint b, string memory errorMessage) pure internal returns (uint c) {
-        require((c = a + b ) >= a, errorMessage);
+        unchecked {
+            require((c = a + b ) >= a, errorMessage);
+        }
     }
 
     function sub_(Exp memory a, Exp memory b) pure internal returns (Exp memory) {
@@ -103,7 +105,9 @@ contract ExponentialNoError {
     }
 
     function sub_(uint a, uint b, string memory errorMessage) pure internal returns (uint c) {
-        require((c = a - b) <= a, errorMessage);
+        unchecked {
+            require((c = a - b) <= a, errorMessage);
+        }
     }
 
     function mul_(Exp memory a, Exp memory b) pure internal returns (Exp memory) {

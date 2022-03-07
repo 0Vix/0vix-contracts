@@ -32,32 +32,30 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         string memory symbol_,
         uint8 decimals_
     ) internal {
-        require(msg.sender == admin, "only admin may initialize the market");
+        require(msg.sender == admin, "only admin may initialize");
         require(
             accrualBlockTimestamp == 0 && borrowIndex == 0,
-            "market may only be initialized once"
+            "already initialized"
         );
 
         // Set initial exchange rate
         initialExchangeRateMantissa = initialExchangeRateMantissa_;
         require(
             initialExchangeRateMantissa > 0,
-            "initial exchange rate must be greater than zero."
+            "init exchange rate must be > 0"
         );
 
         // Set the comptroller
-        uint256 err = _setComptroller(comptroller_);
-        require(err == uint256(Error.NO_ERROR), "setting comptroller failed");
+        require(_setComptroller(comptroller_) == uint256(Error.NO_ERROR), "set comptroller failed");
 
         // Initialize block timestamp and borrow index (block timestamp mocks depend on comptroller being set)
         accrualBlockTimestamp = getBlockTimestamp();
         borrowIndex = mantissaOne;
 
         // Set the interest rate model (depends on block timestamp / borrow index)
-        err = _setInterestRateModelFresh(interestRateModel_);
         require(
-            err == uint256(Error.NO_ERROR),
-            "setting interest rate model failed"
+            _setInterestRateModelFresh(interestRateModel_) == uint256(Error.NO_ERROR),
+            "set interest rate model failed"
         );
 
         name = name_;
@@ -78,7 +76,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
             boostManager != address(0) &&
             IBoostManager(boostManager).isAuthorized(address(this))
         ) {
-            IBoostManager(comptroller.getBoostManager())
+            IBoostManager(boostManager)
                 .updateBoostSupplyBalances(
                     address(this),
                     user,
@@ -98,7 +96,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
             boostManager != address(0) &&
             IBoostManager(boostManager).isAuthorized(address(this))
         ) {
-            IBoostManager(comptroller.getBoostManager())
+            IBoostManager(boostManager)
                 .updateBoostBorrowBalances(
                     address(this),
                     user,
@@ -402,7 +400,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         (MathError err, uint256 result) = borrowBalanceStoredInternal(account);
         require(
             err == MathError.NO_ERROR,
-            "borrowBalanceStored: borrowBalanceStoredInternal failed"
+            "borrowBalanceStored failed"
         );
         return result;
     }
@@ -475,7 +473,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         (MathError err, uint256 result) = exchangeRateStoredInternal();
         require(
             err == MathError.NO_ERROR,
-            "exchangeRateStored: exchangeRateStoredInternal failed"
+            "exchangeRateStored failed"
         );
         return result;
     }
@@ -709,11 +707,6 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
     struct MintLocalVars {
         Error err;
         MathError mathErr;
-        uint256 exchangeRateMantissa;
-        uint256 mintTokens;
-        uint256 totalSupplyNew;
-        uint256 accountTokensNew;
-        uint256 actualMintAmount;
     }
 
     /**
@@ -728,20 +721,22 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         returns (uint256, uint256)
     {
         /* Fail if mint not allowed */
-        uint256 allowed = comptroller.mintAllowed(
-            address(this),
-            minter,
-            mintAmount
-        );
-        if (allowed != 0) {
-            return (
-                failOpaque(
-                    Error.COMPTROLLER_REJECTION,
-                    FailureInfo.MINT_COMPTROLLER_REJECTION,
-                    allowed
-                ),
-                0
+        {
+            uint256 allowed = comptroller.mintAllowed(
+                address(this),
+                minter,
+                mintAmount
             );
+            if (allowed != 0) {
+                return (
+                    failOpaque(
+                        Error.COMPTROLLER_REJECTION,
+                        FailureInfo.MINT_COMPTROLLER_REJECTION,
+                        allowed
+                    ),
+                    0
+                );
+            }
         }
 
         /* Verify market's block timestamp equals current block timestamp */
@@ -753,10 +748,10 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         }
 
         MintLocalVars memory vars;
-
+        uint256 exchangeRateMantissa;
         (
             vars.mathErr,
-            vars.exchangeRateMantissa
+            exchangeRateMantissa
         ) = exchangeRateStoredInternal();
         if (vars.mathErr != MathError.NO_ERROR) {
             return (
@@ -781,16 +776,17 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
          *  in case of a fee. On success, the oToken holds an additional `actualMintAmount`
          *  of cash.
          */
-        vars.actualMintAmount = doTransferIn(minter, mintAmount);
+        uint256 actualMintAmount = doTransferIn(minter, mintAmount);
 
         /*
          * We get the current exchange rate and calculate the number of oTokens to be minted:
          *  mintTokens = actualMintAmount / exchangeRate
          */
 
-        (vars.mathErr, vars.mintTokens) = divScalarByExpTruncate(
-            vars.actualMintAmount,
-            Exp({mantissa: vars.exchangeRateMantissa})
+        uint256 mintTokens;
+        (vars.mathErr, mintTokens) = divScalarByExpTruncate(
+            actualMintAmount,
+            Exp({mantissa: exchangeRateMantissa})
         );
         require(
             vars.mathErr == MathError.NO_ERROR,
@@ -802,43 +798,45 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
          *  totalSupplyNew = totalSupply + mintTokens
          *  accountTokensNew = accountTokens[minter] + mintTokens
          */
-        (vars.mathErr, vars.totalSupplyNew) = addUInt(
+        uint256 totalSupplyNew;
+        (vars.mathErr, totalSupplyNew) = addUInt(
             totalSupply,
-            vars.mintTokens
+            mintTokens
         );
         require(
             vars.mathErr == MathError.NO_ERROR,
-            "MINT_NEW_TOTAL_SUPPLY_CALCULATION_FAILED"
+            "MINT_NEW_TOTAL_SUPPLY_FAILED"
         );
 
-        (vars.mathErr, vars.accountTokensNew) = addUInt(
+        uint256 accountTokensNew;
+        (vars.mathErr, accountTokensNew) = addUInt(
             accountTokens[minter],
-            vars.mintTokens
+            mintTokens
         );
         require(
             vars.mathErr == MathError.NO_ERROR,
-            "MINT_NEW_ACCOUNT_BALANCE_CALCULATION_FAILED"
+            "MINT_NEW_ACCOUNT_BALANCE_FAILED"
         );
 
         _updateBoostSupplyBalances(
             minter,
             accountTokens[minter],
-            vars.accountTokensNew
+            accountTokensNew
         );
 
         /* We write previously calculated values into storage */
-        totalSupply = vars.totalSupplyNew;
-        accountTokens[minter] = vars.accountTokensNew;
+        totalSupply = totalSupplyNew;
+        accountTokens[minter] = accountTokensNew;
 
         /* We emit a Mint event, and a Transfer event */
-        emit Mint(minter, vars.actualMintAmount, vars.mintTokens);
-        emit Transfer(address(this), minter, vars.mintTokens);
+        emit Mint(minter, actualMintAmount, mintTokens);
+        emit Transfer(address(this), minter, mintTokens);
 
         /* We call the defense hook */
         // unused function
         // comptroller.mintVerify(address(this), minter, vars.actualMintAmount, vars.mintTokens);
 
-        return (uint256(Error.NO_ERROR), vars.actualMintAmount);
+        return (uint256(Error.NO_ERROR), actualMintAmount);
     }
 
     /**
@@ -908,7 +906,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
     ) internal returns (uint256) {
         require(
             redeemTokensIn == 0 || redeemAmountIn == 0,
-            "one of redeemTokensIn or redeemAmountIn must be zero"
+            "tokensIn or amountIn must be 0"
         );
 
         RedeemLocalVars memory vars;
@@ -1113,13 +1111,6 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         return borrowFresh(payable(msg.sender), borrowAmount);
     }
 
-    struct BorrowLocalVars {
-        MathError mathErr;
-        uint256 accountBorrows;
-        uint256 accountBorrowsNew;
-        uint256 totalBorrowsNew;
-    }
-
     /**
      * @notice Users borrow assets from the protocol to their own address
      * @param borrowAmount The amount of the underlying asset to borrow
@@ -1130,18 +1121,20 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         returns (uint256)
     {
         /* Fail if borrow not allowed */
-        uint256 allowed = comptroller.borrowAllowed(
-            address(this),
-            borrower,
-            borrowAmount
-        );
-        if (allowed != 0) {
-            return
-                failOpaque(
-                    Error.COMPTROLLER_REJECTION,
-                    FailureInfo.BORROW_COMPTROLLER_REJECTION,
-                    allowed
-                );
+        {
+            uint256 allowed = comptroller.borrowAllowed(
+                address(this),
+                borrower,
+                borrowAmount
+            );
+            if (allowed != 0) {
+                return
+                    failOpaque(
+                        Error.COMPTROLLER_REJECTION,
+                        FailureInfo.BORROW_COMPTROLLER_REJECTION,
+                        allowed
+                    );
+            }
         }
 
         /* Verify market's block timestamp equals current block timestamp */
@@ -1162,7 +1155,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
                 );
         }
 
-        BorrowLocalVars memory vars;
+        MathError mathErr;
         uint256 oldBorrowedBalance = borrowBalanceStored(borrower);
 
         /*
@@ -1170,42 +1163,45 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
          *  accountBorrowsNew = accountBorrows + borrowAmount
          *  totalBorrowsNew = totalBorrows + borrowAmount
          */
-        (vars.mathErr, vars.accountBorrows) = borrowBalanceStoredInternal(
+        uint256 _accountBorrows;
+        (mathErr, _accountBorrows) = borrowBalanceStoredInternal(
             borrower
         );
-        if (vars.mathErr != MathError.NO_ERROR) {
+        if (mathErr != MathError.NO_ERROR) {
             return
                 failOpaque(
                     Error.MATH_ERROR,
                     FailureInfo.BORROW_ACCUMULATED_BALANCE_CALCULATION_FAILED,
-                    uint256(vars.mathErr)
+                    uint256(mathErr)
                 );
         }
 
-        (vars.mathErr, vars.accountBorrowsNew) = addUInt(
-            vars.accountBorrows,
+        uint256 accountBorrowsNew;
+        (mathErr, accountBorrowsNew) = addUInt(
+            _accountBorrows,
             borrowAmount
         );
-        if (vars.mathErr != MathError.NO_ERROR) {
+        if (mathErr != MathError.NO_ERROR) {
             return
                 failOpaque(
                     Error.MATH_ERROR,
                     FailureInfo
                         .BORROW_NEW_ACCOUNT_BORROW_BALANCE_CALCULATION_FAILED,
-                    uint256(vars.mathErr)
+                    uint256(mathErr)
                 );
         }
 
-        (vars.mathErr, vars.totalBorrowsNew) = addUInt(
+        uint256 totalBorrowsNew;
+        (mathErr, totalBorrowsNew) = addUInt(
             totalBorrows,
             borrowAmount
         );
-        if (vars.mathErr != MathError.NO_ERROR) {
+        if (mathErr != MathError.NO_ERROR) {
             return
                 failOpaque(
                     Error.MATH_ERROR,
                     FailureInfo.BORROW_NEW_TOTAL_BALANCE_CALCULATION_FAILED,
-                    uint256(vars.mathErr)
+                    uint256(mathErr)
                 );
         }
 
@@ -1222,16 +1218,16 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         doTransferOut(borrower, borrowAmount);
 
         /* We write the previously calculated values into storage */
-        accountBorrows[borrower].principal = vars.accountBorrowsNew;
+        accountBorrows[borrower].principal = accountBorrowsNew;
         accountBorrows[borrower].interestIndex = borrowIndex;
-        totalBorrows = vars.totalBorrowsNew;
+        totalBorrows = totalBorrowsNew;
 
         /* We emit a Borrow event */
         emit Borrow(
             borrower,
             borrowAmount,
-            vars.accountBorrowsNew,
-            vars.totalBorrowsNew
+            accountBorrowsNew,
+            totalBorrowsNew
         );
 
         _updateBoostBorrowBalances(
@@ -1403,7 +1399,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         );
         require(
             vars.mathErr == MathError.NO_ERROR,
-            "REPAY_BORROW_NEW_ACCOUNT_BORROW_BALANCE_CALCULATION_FAILED"
+            "REPAY_NEW_ACCOUNT_BALANCE_FAILED"
         );
 
         (vars.mathErr, vars.totalBorrowsNew) = subUInt(
@@ -1412,7 +1408,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         );
         require(
             vars.mathErr == MathError.NO_ERROR,
-            "REPAY_BORROW_NEW_TOTAL_BALANCE_CALCULATION_FAILED"
+            "REPAY_NEW_TOTAL_BALANCE_FAILED"
         );
 
         /* We write the previously calculated values into storage */
@@ -1802,8 +1798,15 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
     /*** Admin Functions ***/
     // todo: maybe remove
+    function unauthorized(FailureInfo info) internal returns(uint) {
+        return fail(
+            Error.UNAUTHORIZED,
+            info
+        );
+    }
+
     function setAdmin(address payable _admin) public {
-        if (msg.sender != admin) revert("Unauthorized");
+        require(msg.sender == admin, "Unauthorized");
         address oldAdmin = admin;
         admin = _admin;
         emit NewAdmin(oldAdmin, admin);
@@ -1821,11 +1824,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
     {
         // Check caller = admin
         if (msg.sender != admin) {
-            return
-                fail(
-                    Error.UNAUTHORIZED,
-                    FailureInfo.SET_PENDING_ADMIN_OWNER_CHECK
-                );
+            return unauthorized(FailureInfo.SET_PENDING_ADMIN_OWNER_CHECK);
         }
 
         // Save current value, if any, for inclusion in log
@@ -1848,11 +1847,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
     function _acceptAdmin() external override returns (uint256) {
         // Check caller is pendingAdmin and pendingAdmin ≠ address(0)
         if (msg.sender != pendingAdmin || msg.sender == address(0)) {
-            return
-                fail(
-                    Error.UNAUTHORIZED,
-                    FailureInfo.ACCEPT_ADMIN_PENDING_ADMIN_CHECK
-                );
+            return unauthorized(FailureInfo.ACCEPT_ADMIN_PENDING_ADMIN_CHECK);
         }
 
         // Save current values for inclusion in log
@@ -1882,11 +1877,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
     {
         // Check caller is admin
         if (msg.sender != admin) {
-            return
-                fail(
-                    Error.UNAUTHORIZED,
-                    FailureInfo.SET_COMPTROLLER_OWNER_CHECK
-                );
+            return unauthorized(FailureInfo.SET_COMPTROLLER_OWNER_CHECK);
         }
 
         IComptroller oldComptroller = comptroller;
@@ -1935,12 +1926,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         returns (uint256)
     {
         // Check caller is admin
-        if (msg.sender != admin) {
-            return
-                fail(
-                    Error.UNAUTHORIZED,
-                    FailureInfo.SET_RESERVE_FACTOR_ADMIN_CHECK
-                );
+        if (msg.sender != admin) { // TODO
+            return unauthorized(FailureInfo.SET_RESERVE_FACTOR_ADMIN_CHECK);
         }
 
         // Verify market's block timestamp equals current block timestamp
@@ -2036,13 +2023,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         actualAddAmount = doTransferIn(msg.sender, addAmount);
 
+        /* Reverts on overflow */
         totalReservesNew = totalReserves + actualAddAmount;
-
-        /* Revert on overflow */
-        require(
-            totalReservesNew >= totalReserves,
-            "add reserves unexpected overflow"
-        );
 
         // Store reserves[n+1] = reserves[n] + actualAddAmount
         totalReserves = totalReservesNew;
@@ -2092,11 +2074,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         // Check caller is admin
         if (msg.sender != admin) {
-            return
-                fail(
-                    Error.UNAUTHORIZED,
-                    FailureInfo.REDUCE_RESERVES_ADMIN_CHECK
-                );
+            return unauthorized(FailureInfo.REDUCE_RESERVES_ADMIN_CHECK);
         }
 
         // We fail gracefully unless market's block timestamp equals current block timestamp
@@ -2127,13 +2105,9 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         // EFFECTS & INTERACTIONS
         // (No safe failures beyond this point)
 
-        totalReservesNew = totalReserves - reduceAmount;
         // We checked reduceAmount <= totalReserves above, so this should never revert.
-        require(
-            totalReservesNew <= totalReserves,
-            "reduce reserves unexpected underflow"
-        );
-
+        totalReservesNew = totalReserves - reduceAmount;
+        
         // Store reserves[n+1] = reserves[n] - reduceAmount
         totalReserves = totalReservesNew;
 
@@ -2183,11 +2157,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         // Check caller is admin
         if (msg.sender != admin) {
-            return
-                fail(
-                    Error.UNAUTHORIZED,
-                    FailureInfo.SET_INTEREST_RATE_MODEL_OWNER_CHECK
-                );
+            return unauthorized(FailureInfo.SET_INTEREST_RATE_MODEL_OWNER_CHECK);
         }
 
         // We fail gracefully unless market's block timestamp equals current block timestamp
@@ -2259,11 +2229,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         // Check caller is admin
         if (msg.sender != admin) {
-            return
-                fail(
-                    Error.UNAUTHORIZED,
-                    FailureInfo.SET_PROTOCOL_SEIZE_SHARE_OWNER_CHECK
-                );
+            return unauthorized(FailureInfo.SET_PROTOCOL_SEIZE_SHARE_OWNER_CHECK);
         }
 
         // We fail gracefully unless market's block timestamp equals current block timestamp

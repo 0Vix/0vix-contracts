@@ -25,7 +25,7 @@ contract OErc20Delegate is OErc20, IODelegate {
             implementation = address(0);
         }
 
-        require(msg.sender == admin, "only the admin may call _becomeImplementation");
+        require(msg.sender == admin, "_becomeImplementation admin only");
     }
 
     /**
@@ -37,6 +37,6 @@ contract OErc20Delegate is OErc20, IODelegate {
             implementation = address(0);
         }
 
-        require(msg.sender == admin, "only the admin may call _resignImplementation");
+        require(msg.sender == admin, "_resignImplementation admin only");
     }
 }
