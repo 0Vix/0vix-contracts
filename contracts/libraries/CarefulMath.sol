@@ -22,16 +22,18 @@ contract CarefulMath {
     * @dev Multiplies two numbers, returns an error on overflow.
     */
     function mulUInt(uint a, uint b) internal pure returns (MathError, uint) {
-        if (a == 0) {
-            return (MathError.NO_ERROR, 0);
-        }
+        unchecked {
+            if (a == 0) {
+                return (MathError.NO_ERROR, 0);
+            }
 
-        uint c = a * b;
+            uint c = a * b;
 
-        if (c / a != b) {
-            return (MathError.INTEGER_OVERFLOW, 0);
-        } else {
-            return (MathError.NO_ERROR, c);
+            if (c / a != b) {
+                return (MathError.INTEGER_OVERFLOW, 0);
+            } else {
+                return (MathError.NO_ERROR, c);
+            }
         }
     }
 
@@ -39,21 +41,25 @@ contract CarefulMath {
     * @dev Integer division of two numbers, truncating the quotient.
     */
     function divUInt(uint a, uint b) internal pure returns (MathError, uint) {
-        if (b == 0) {
-            return (MathError.DIVISION_BY_ZERO, 0);
-        }
+        unchecked {
+            if (b == 0) {
+                return (MathError.DIVISION_BY_ZERO, 0);
+            }
 
-        return (MathError.NO_ERROR, a / b);
+            return (MathError.NO_ERROR, a / b);
+        }
     }
 
     /**
     * @dev Subtracts two numbers, returns an error on overflow (i.e. if subtrahend is greater than minuend).
     */
     function subUInt(uint a, uint b) internal pure returns (MathError, uint) {
-        if (b <= a) {
-            return (MathError.NO_ERROR, a - b);
-        } else {
-            return (MathError.INTEGER_UNDERFLOW, 0);
+        unchecked {
+            if (b <= a) {
+                return (MathError.NO_ERROR, a - b);
+            } else {
+                return (MathError.INTEGER_UNDERFLOW, 0);
+            }
         }
     }
 
@@ -61,12 +67,14 @@ contract CarefulMath {
     * @dev Adds two numbers, returns an error on overflow.
     */
     function addUInt(uint a, uint b) internal pure returns (MathError, uint) {
-        uint c = a + b;
+        unchecked {
+            uint c = a + b;
 
-        if (c >= a) {
-            return (MathError.NO_ERROR, c);
-        } else {
-            return (MathError.INTEGER_OVERFLOW, 0);
+            if (c >= a) {
+                return (MathError.NO_ERROR, c);
+            } else {
+                return (MathError.INTEGER_OVERFLOW, 0);
+            }
         }
     }
 

@@ -139,11 +139,15 @@ contract ExponentialNoError {
     }
 
     function mul_(uint a, uint b) pure internal returns (uint c) {
-        require(a == 0 || (c = a * b) / a == b, "multiplication overflow");
+        unchecked {
+            require(a == 0 || (c = a * b) / a == b, "multiplication overflow");
+        }
     }
 
     function mul_(uint a, uint b, string memory errorMessage) pure internal returns (uint c) {
-        require(a == 0 || (c = a * b) / a == b, errorMessage);
+        unchecked {
+            require(a == 0 || (c = a * b) / a == b, errorMessage);
+        }
     }
 
     function div_(Exp memory a, Exp memory b) pure internal returns (Exp memory) {

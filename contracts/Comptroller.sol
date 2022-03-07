@@ -209,8 +209,6 @@ contract Comptroller is ComptrollerStorage, IComptroller, ComptrollerErrorReport
             return failOpaque(Error.REJECTION, FailureInfo.EXIT_MARKET_REJECTION, allowed);
         }
 
-        Market storage marketToExit = markets[address(oToken)];
-
         /* Return true if the sender is not already ‘in’ the market */
         if (!accountMembership[address(oToken)][msg.sender]) {
             return uint(Error.NO_ERROR);
