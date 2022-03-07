@@ -1,10 +1,10 @@
 pragma solidity ^0.8.4;
 
 interface IComptroller {
-    function _setRewardSpeeds(
-        address[] memory oToken,
-        uint256[] memory supplyRewardSpeeds,
-        uint256[] memory borrowRewardSpeeds
+    function _setRewardSpeed(
+        uint8 rewardType,
+        address oToken,
+        uint256 rewardSpeed
     ) external;
 
     function isMarket(address market) external view returns (bool); // todo: needs to be added to comptroller

@@ -2,8 +2,8 @@
 pragma solidity =0.8.4;
 
 import "../interfaces/IVotingEscrow.sol";
-import { IBoostManager450 as IBoostManager } from "../IBoostManager@0.8.4.sol";
-import "../openzeppelin@4.5.0/utils/structs/EnumerableSet.sol";
+import "../interfaces/IBoostManager.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./IComptroller.sol";
 
 
@@ -646,14 +646,7 @@ contract VoteController {
             uint256 reward = ((fixedAmount *
                 fixedRewardWeights[markets.at(i)]) / HUNDRED_PERCENT) +
                 ((votableAmount * relWeight) / 1e18);
-
-            address[] memory addrs = new address[](1);
-            addrs[0] = addr;
-
-            uint256[] memory rewards = new uint256[](1);
-            rewards[0] = reward;
-
-            comp._setRewardSpeeds(addrs, rewards, rewards);
+            comp._setRewardSpeed(0, addr, reward);
             updates.push(Updated(addr, reward, block.timestamp));
         }
 
