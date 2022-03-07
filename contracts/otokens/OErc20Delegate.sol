@@ -1,17 +1,14 @@
 pragma solidity 0.8.4;
 
 import "./OErc20.sol";
+import "./interfaces/IODelegate.sol";
 
 /**
  * @title 0VIX's OErc20Delegate Contract
  * @notice OTokens which wrap an EIP-20 underlying and are delegated to
  * @author 0VIX
  */
-contract OErc20Delegate is OErc20, ODelegateInterface {
-    /**
-     * @notice Construct an empty delegate
-     */
-    constructor() public {}
+contract OErc20Delegate is OErc20, IODelegate {
 
     address public override implementation;
 

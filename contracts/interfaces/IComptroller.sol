@@ -1,6 +1,8 @@
 pragma solidity 0.8.4;
 
-interface ComptrollerInterface {
+import "../otokens/interfaces/IOToken.sol";
+
+interface IComptroller {
     /// @notice Indicator that this is a Comptroller contract (for inspection)
     function isComptroller() external view returns(bool);
 
@@ -57,6 +59,25 @@ interface ComptrollerInterface {
         address oTokenCollateral,
         uint repayAmount) external view returns (uint, uint);
 
+
+
     function isMarket(address market) external view returns(bool);
     function getBoostManager() external view returns(address);
+    function getAllMarkets() external view returns(IOToken[] memory);
+
+    function updateAndDistributeSupplierRewardsForToken(
+        address oToken,
+        address account
+    ) external;
+
+    function updateAndDistributeBorrowerRewardsForToken(
+        address oToken,
+        address borrower
+    ) external;
+
+    function _setRewardSpeed(
+        uint8 rewardType,
+        address oToken,
+        uint256 rewardSpeed
+    ) external;
 }

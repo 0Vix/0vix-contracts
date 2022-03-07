@@ -1,6 +1,6 @@
 pragma solidity 0.8.4;
 
-import "./OMatic.sol";
+import "./otokens/OMatic.sol";
 
 /**
  * @title 0VIX's Maximillion Contract

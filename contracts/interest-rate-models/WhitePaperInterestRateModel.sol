@@ -1,17 +1,19 @@
 pragma solidity 0.8.4;
 
-import "./InterestRateModel.sol";
-import "./SafeMath.sol";
+import "./interfaces/IInterestRateModel.sol";
+import "../libraries/SafeMath.sol";
 
 /**
   * @title 0VIX's WhitePaperInterestRateModel Contract
   * @author 0VIX
   * @notice The parameterized model described in section 2.4 of the original 0VIX Protocol whitepaper
   */
-contract WhitePaperInterestRateModel is InterestRateModel {
+contract WhitePaperInterestRateModel is IInterestRateModel {
     using SafeMath for uint;
 
     event NewInterestParams(uint baseRatePerTimestamp, uint multiplierPerTimestamp);
+
+    bool public constant override isInterestRateModel = true;
 
     /**
      * @notice The approximate number of timestamps per year that is assumed by the interest rate model

@@ -1,26 +1,26 @@
 pragma solidity 0.8.4;
 
 import "../PriceOracle.sol";
-import "../OErc20.sol";
-import "../EIP20Interface.sol";
-import "../SafeMath.sol";
-import "./AggregatorV2V3Interface.sol";
+import "../otokens/OErc20.sol";
+import "../otokens/interfaces/IEIP20.sol";
+import "../libraries/SafeMath.sol";
+import "./interfaces/IAggregatorV2V3.sol";
 
 contract OvixChainlinkOracle is PriceOracle {
     using SafeMath for uint;
     address public admin;
 
     mapping(address => uint) internal prices;
-    mapping(bytes32 => AggregatorV2V3Interface) internal feeds;
+    mapping(bytes32 => IAggregatorV2V3) internal feeds;
     event PricePosted(address asset, uint previousPriceMantissa, uint requestedPriceMantissa, uint newPriceMantissa);
     event NewAdmin(address oldAdmin, address newAdmin);
     event FeedSet(address feed, string symbol);
 
-    constructor() public {
+    constructor() {
         admin = msg.sender;
     }
 
-    function getUnderlyingPrice(OToken oToken) public override view returns (uint) {
+    function getUnderlyingPrice(IOToken oToken) public override view returns (uint) {
         string memory symbol = oToken.symbol();
         if (compareStrings(symbol, "oMATIC")) {
             return getChainlinkPrice(getFeed(symbol));
@@ -29,8 +29,8 @@ contract OvixChainlinkOracle is PriceOracle {
         }
     }
 
-    function getPrice(OToken oToken) public view returns (uint price) {
-        EIP20Interface token = EIP20Interface(OErc20(address(oToken)).underlying());
+    function getPrice(IOToken oToken) public view returns (uint price) {
+        IEIP20 token = IEIP20(OErc20(address(oToken)).underlying());
 
         if (prices[address(token)] != 0) {
             price = prices[address(token)];
@@ -47,7 +47,7 @@ contract OvixChainlinkOracle is PriceOracle {
         }
     }
 
-    function getChainlinkPrice(AggregatorV2V3Interface feed) public view returns (uint) {
+    function getChainlinkPrice(IAggregatorV2V3 feed) public view returns (uint) {
         // Chainlink USD-denominated feeds store answers at 8 decimals
         uint decimalDelta = uint(18).sub(feed.decimals());
         // Ensure that we don't multiply the result by 0
@@ -58,7 +58,7 @@ contract OvixChainlinkOracle is PriceOracle {
         }
     }
 
-    function setUnderlyingPrice(OToken oToken, uint underlyingPriceMantissa) external onlyAdmin() {
+    function setUnderlyingPrice(IOToken oToken, uint underlyingPriceMantissa) external onlyAdmin() {
         address asset = address(OErc20(address(oToken)).underlying());
         emit PricePosted(asset, prices[asset], underlyingPriceMantissa, underlyingPriceMantissa);
         prices[asset] = underlyingPriceMantissa;
@@ -72,10 +72,10 @@ contract OvixChainlinkOracle is PriceOracle {
     function setFeed(string calldata symbol, address feed) external onlyAdmin() {
         require(feed != address(0) && feed != address(this), "invalid feed address");
         emit FeedSet(feed, symbol);
-        feeds[keccak256(abi.encodePacked(symbol))] = AggregatorV2V3Interface(feed);
+        feeds[keccak256(abi.encodePacked(symbol))] = IAggregatorV2V3(feed);
     }
 
-    function getFeed(string memory symbol) public view returns (AggregatorV2V3Interface) {
+    function getFeed(string memory symbol) public view returns (IAggregatorV2V3) {
         return feeds[keccak256(abi.encodePacked(symbol))];
     }
 

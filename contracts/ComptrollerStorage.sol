@@ -1,33 +1,13 @@
 pragma solidity 0.8.4;
 
-import "./OToken.sol";
+import "./otokens/interfaces/IOToken.sol";
 import "./PriceOracle.sol";
 
 import "./interfaces/IBoostManager.sol";
 
-contract UnitrollerAdminStorage {
-    /**
-    * @notice Administrator for this contract
-    */
-    address public admin;
+import "./UnitrollerAdminStorage.sol";
 
-    /**
-    * @notice Pending administrator for this contract
-    */
-    address public pendingAdmin;
-
-    /**
-    * @notice Active brains of Unitroller
-    */
-    address public comptrollerImplementation;
-
-    /**
-    * @notice Pending brains of Unitroller
-    */
-    address public pendingComptrollerImplementation;
-}
-
-contract ComptrollerVXStorage is UnitrollerAdminStorage {
+contract ComptrollerStorage is UnitrollerAdminStorage {
 
     /**
      * @notice Oracle which gives the price of any given asset
@@ -52,7 +32,7 @@ contract ComptrollerVXStorage is UnitrollerAdminStorage {
     /**
      * @notice Per-account mapping of "assets you are in", capped by maxAssets
      */
-    mapping(address => OToken[]) public accountAssets;
+    mapping(address => IOToken[]) public accountAssets;
 
     /// @notice Per-market mapping of "accounts in this asset"
     mapping(address => mapping(address => bool)) public accountMembership;
@@ -98,7 +78,7 @@ contract ComptrollerVXStorage is UnitrollerAdminStorage {
     mapping(address => PauseData) public guardianPaused;
 
     /// @notice A list of all markets
-    OToken[] public allMarkets;
+    IOToken[] public allMarkets;
 
     // @notice The borrowCapGuardian can set borrowCaps to any number for any market. Lowering the borrow cap could disable borrowing on the given market.
     address public borrowCapGuardian;

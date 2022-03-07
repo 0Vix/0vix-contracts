@@ -1,13 +1,16 @@
 pragma solidity 0.8.4;
 
-import "./OTokenInterfaces.sol";
+import "./abstract/OTokenStorage.sol";
+import "./abstract/OErc20Storage.sol";
+import "./interfaces/IODelegator.sol";
 
 /**
  * @title 0VIX's OErc20Delegator Contract
  * @notice OTokens which wrap an EIP-20 underlying and delegate to an implementation
  * @author 0VIX
  */
-contract OErc20Delegator is OTokenStorage, OErc20Storage, ODelegatorInterface {
+contract OErc20Delegator is OTokenStorage, OErc20Storage, IODelegator {
+
     address public override implementation;
 
     /**
@@ -24,8 +27,8 @@ contract OErc20Delegator is OTokenStorage, OErc20Storage, ODelegatorInterface {
      * @param becomeImplementationData The encoded args for becomeImplementation
      */
     constructor(address underlying_,
-                ComptrollerInterface comptroller_,
-                InterestRateModel interestRateModel_,
+                IComptroller comptroller_,
+                IInterestRateModel interestRateModel_,
                 uint initialExchangeRateMantissa_,
                 string memory name_,
                 string memory symbol_,
@@ -146,7 +149,7 @@ contract OErc20Delegator is OTokenStorage, OErc20Storage, ODelegatorInterface {
      * @param repayAmount The amount of the underlying borrowed asset to repay
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function liquidateBorrow(address borrower, uint repayAmount, OTokenInterface oTokenCollateral) external override returns (uint) {
+    function liquidateBorrow(address borrower, uint repayAmount, IOToken oTokenCollateral) external override returns (uint) {
         bytes memory data = delegateToImplementation(abi.encodeWithSignature("liquidateBorrow(address,uint256,address)", borrower, repayAmount, oTokenCollateral));
         return abi.decode(data, (uint));
     }
@@ -333,7 +336,7 @@ contract OErc20Delegator is OTokenStorage, OErc20Storage, ODelegatorInterface {
      * @notice A public function to sweep accidental ERC-20 transfers to this contract. Tokens are sent to admin (timelock)
      * @param token The address of the ERC-20 token to sweep
      */
-    function sweepToken(EIP20NonStandardInterface token) external override {
+    function sweepToken(IEIP20NonStandard token) external override {
         delegateToImplementation(abi.encodeWithSignature("sweepToken(address)", token));
     }
 
@@ -356,7 +359,7 @@ contract OErc20Delegator is OTokenStorage, OErc20Storage, ODelegatorInterface {
       * @dev Admin function to set a new comptroller
       * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
       */
-    function _setComptroller(ComptrollerInterface newComptroller) public override returns (uint) {
+    function _setComptroller(IComptroller newComptroller) public override returns (uint) {
         bytes memory data = delegateToImplementation(abi.encodeWithSignature("_setComptroller(address)", newComptroller));
         return abi.decode(data, (uint));
     }
@@ -407,7 +410,7 @@ contract OErc20Delegator is OTokenStorage, OErc20Storage, ODelegatorInterface {
      * @param newInterestRateModel the new interest rate model to use
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function _setInterestRateModel(InterestRateModel newInterestRateModel) public override returns (uint) {
+    function _setInterestRateModel(IInterestRateModel newInterestRateModel) public override returns (uint) {
         bytes memory data = delegateToImplementation(abi.encodeWithSignature("_setInterestRateModel(address)", newInterestRateModel));
         return abi.decode(data, (uint));
     }

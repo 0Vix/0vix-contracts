@@ -1,12 +1,13 @@
 pragma solidity 0.8.4;
 
-import "./ComptrollerInterface.sol";
-import "./OTokenInterfaces.sol";
-import "./ErrorReporter.sol";
-import "./Exponential.sol";
-import "./EIP20Interface.sol";
-import "./InterestRateModel.sol";
-import "./interfaces/IBoostManager.sol";
+import "./OTokenStorage.sol";
+
+import "../../interfaces/IComptroller.sol";
+import "../../libraries/ErrorReporter.sol";
+import "../../libraries/Exponential.sol";
+import "../interfaces/IEIP20.sol";
+import "../../interest-rate-models/interfaces/IInterestRateModel.sol";
+import "../../interfaces/IBoostManager.sol";
 
 /**
  * @title 0VIX's OToken Contract
@@ -24,8 +25,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @param decimals_ EIP-20 decimal precision of this token
      */
     function initialize(
-        ComptrollerInterface comptroller_,
-        InterestRateModel interestRateModel_,
+        IComptroller comptroller_,
+        IInterestRateModel interestRateModel_,
         uint256 initialExchangeRateMantissa_,
         string memory name_,
         string memory symbol_,
@@ -1451,7 +1452,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
     function liquidateBorrowInternal(
         address borrower,
         uint256 repayAmount,
-        OTokenInterface oTokenCollateral
+        IOToken oTokenCollateral
     ) internal nonReentrant returns (uint256, uint256) {
         uint256 error = accrueInterest();
         if (error != uint256(Error.NO_ERROR)) {
@@ -1500,7 +1501,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         address liquidator,
         address borrower,
         uint256 repayAmount,
-        OTokenInterface oTokenCollateral
+        IOToken oTokenCollateral
     ) internal returns (uint256, uint256) {
         /* Fail if liquidate not allowed */
         uint256 allowed = comptroller.liquidateBorrowAllowed(
@@ -1878,7 +1879,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @dev Admin function to set a new comptroller
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function _setComptroller(ComptrollerInterface newComptroller)
+    function _setComptroller(IComptroller newComptroller)
         public override
         returns (uint256)
     {
@@ -1891,7 +1892,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
                 );
         }
 
-        ComptrollerInterface oldComptroller = comptroller;
+        IComptroller oldComptroller = comptroller;
         // Ensure invoke comptroller.isComptroller() returns true
         require(newComptroller.isComptroller(), "marker method returned false");
 
@@ -2153,7 +2154,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @param newInterestRateModel the new interest rate model to use
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function _setInterestRateModel(InterestRateModel newInterestRateModel)
+    function _setInterestRateModel(IInterestRateModel newInterestRateModel)
         public override
         returns (uint256)
     {
@@ -2176,12 +2177,12 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @param newInterestRateModel the new interest rate model to use
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function _setInterestRateModelFresh(InterestRateModel newInterestRateModel)
+    function _setInterestRateModelFresh(IInterestRateModel newInterestRateModel)
         internal
         returns (uint256)
     {
         // Used to store old model for use in the event that is emitted on success
-        InterestRateModel oldInterestRateModel;
+        IInterestRateModel oldInterestRateModel;
 
         // Check caller is admin
         if (msg.sender != admin) {

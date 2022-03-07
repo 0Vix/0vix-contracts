@@ -1,16 +1,18 @@
 pragma solidity 0.8.4;
 
-import "./InterestRateModel.sol";
-import "./SafeMath.sol";
+import "./interfaces/IInterestRateModel.sol";
+import "../libraries/SafeMath.sol";
 
 /**
   * @title 0VIX's JumpRateModel Contract
   * @author 0VIX
   */
-contract JumpRateModel is InterestRateModel {
+contract JumpRateModel is IInterestRateModel {
     using SafeMath for uint;
 
     event NewInterestParams(uint baseRatePerTimestamp, uint multiplierPerTimestamp, uint jumpMultiplierPerTimestamp, uint kink);
+
+    bool public constant override isInterestRateModel = true;
 
     /**
      * @notice The approximate number of timestamps per year that is assumed by the interest rate model

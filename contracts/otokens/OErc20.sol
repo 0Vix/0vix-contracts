@@ -1,6 +1,7 @@
 pragma solidity 0.8.4;
 
-import "./OToken.sol";
+import "./abstract/OToken.sol";
+import "./abstract/OErc20Storage.sol";
 
 /**
  * @title 0VIX's OErc20 Contract
@@ -9,8 +10,6 @@ import "./OToken.sol";
  */
 contract OErc20 is OToken, OErc20Storage {
     bool isInit = true;
-
-    constructor() public {}
 
     /**
      * @notice Initialize the new money market
@@ -24,8 +23,8 @@ contract OErc20 is OToken, OErc20Storage {
      */
     function init(
         address underlying_,
-        ComptrollerInterface comptroller_,
-        InterestRateModel interestRateModel_,
+        IComptroller comptroller_,
+        IInterestRateModel interestRateModel_,
         uint256 initialExchangeRateMantissa_,
         string memory name_,
         string memory symbol_,
@@ -46,7 +45,7 @@ contract OErc20 is OToken, OErc20Storage {
 
         // Set underlying and sanity check it
         underlying = underlying_;
-        EIP20Interface(underlying).totalSupply();
+        IEIP20(underlying).totalSupply();
     }
 
     /*** User Interface ***/
@@ -126,7 +125,7 @@ contract OErc20 is OToken, OErc20Storage {
     function liquidateBorrow(
         address borrower,
         uint256 repayAmount,
-        OTokenInterface oTokenCollateral
+        IOToken oTokenCollateral
     ) external override returns (uint256) {
         (uint256 err, ) = liquidateBorrowInternal(
             borrower,
@@ -140,7 +139,7 @@ contract OErc20 is OToken, OErc20Storage {
      * @notice A public function to sweep accidental ERC-20 transfers to this contract. Tokens are sent to admin (timelock)
      * @param token The address of the ERC-20 token to sweep
      */
-    function sweepToken(EIP20NonStandardInterface token) external override {
+    function sweepToken(IEIP20NonStandard token) external override {
         require(
             address(token) != underlying,
             "OErc20::sweepToken: can not sweep underlying token"
@@ -166,7 +165,7 @@ contract OErc20 is OToken, OErc20Storage {
      * @return The quantity of underlying tokens owned by this contract
      */
     function getCashPrior() internal override view returns (uint256) {
-        EIP20Interface token = EIP20Interface(underlying);
+        IEIP20 token = IEIP20(underlying);
         return token.balanceOf(address(this));
     }
 
@@ -183,8 +182,8 @@ contract OErc20 is OToken, OErc20Storage {
         internal override
         returns (uint256)
     {
-        EIP20NonStandardInterface token = EIP20NonStandardInterface(underlying);
-        uint256 balanceBefore = EIP20Interface(underlying).balanceOf(
+        IEIP20NonStandard token = IEIP20NonStandard(underlying);
+        uint256 balanceBefore = IEIP20(underlying).balanceOf(
             address(this)
         );
         token.transferFrom(from, address(this), amount);
@@ -209,7 +208,7 @@ contract OErc20 is OToken, OErc20Storage {
         require(success, "TOKEN_TRANSFER_IN_FAILED");
 
         // Calculate the amount that was *actually* transferred
-        uint256 balanceAfter = EIP20Interface(underlying).balanceOf(
+        uint256 balanceAfter = IEIP20(underlying).balanceOf(
             address(this)
         );
         require(balanceAfter >= balanceBefore, "TOKEN_TRANSFER_IN_OVERFLOW");
@@ -226,7 +225,7 @@ contract OErc20 is OToken, OErc20Storage {
      *            See here: https://medium.com/coinmonks/missing-return-value-bug-at-least-130-tokens-affected-d67bf08521ca
      */
     function doTransferOut(address payable to, uint256 amount) internal override {
-        EIP20NonStandardInterface token = EIP20NonStandardInterface(underlying);
+        IEIP20NonStandard token = IEIP20NonStandard(underlying);
         token.transfer(to, amount);
 
         bool success;

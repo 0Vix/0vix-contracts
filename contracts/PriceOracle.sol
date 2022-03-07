@@ -1,6 +1,6 @@
 pragma solidity 0.8.4;
 
-import "./OToken.sol";
+import "./otokens/interfaces/IOToken.sol";
 
 abstract contract PriceOracle {
     /// @notice Indicator that this is a PriceOracle contract (for inspection)
@@ -12,5 +12,5 @@ abstract contract PriceOracle {
       * @return The underlying asset price mantissa (scaled by 1e18).
       *  Zero means the price is unavailable.
       */
-    function getUnderlyingPrice(OToken oToken) external virtual view returns (uint);
+    function getUnderlyingPrice(IOToken oToken) external virtual view returns (uint);
 }

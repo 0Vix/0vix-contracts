@@ -6,7 +6,7 @@ pragma solidity 0.8.4;
  * interfaces so this contract is a combination of v0.5 AggregatorInterface.sol
  * and v0.5 AggregatorV3Interface.sol.
  */
-interface AggregatorV2V3Interface {
+interface IAggregatorV2V3 {
   //
   // V2 Interface:
   //

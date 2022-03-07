@@ -3,8 +3,8 @@ pragma solidity =0.8.4;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../interfaces/IoToken.sol";
-import "./IComptroller.sol";
+import "../otokens/interfaces/IOToken.sol";
+import "../interfaces/IComptroller.sol";
 
 
 contract BoostManager is Ownable {
@@ -53,19 +53,19 @@ contract BoostManager is Ownable {
         onlyAuthorized
         returns (bool)
     {
-        address[] memory markets = comptroller.getAllMarkets();
+        IOToken[] memory markets = comptroller.getAllMarkets();
 
         veBalances[user] = veOVIX.balanceOf(user);
         for (uint256 i = 0; i < markets.length; i++) {
-            _updateBoostBasisPerMarket(markets[i], user);
+            _updateBoostBasisPerMarket(address(markets[i]), user);
         }
 
         return veBalances[user] == 0 ? false : true;
     }
 
     function _updateBoostBasisPerMarket(address market, address user) internal {
-        uint256 userSupply = IoToken(market).balanceOf(user);
-        uint256 userBorrows = IoToken(market).borrowBalanceStored(user);
+        uint256 userSupply = IOToken(market).balanceOf(user);
+        uint256 userBorrows = IOToken(market).borrowBalanceStored(user);
         if (userSupply > 0) {
             uint256 oldSupplyBoostBasis = supplyBoosterBasis[market][user];
             comptroller.updateAndDistributeSupplierRewardsForToken(
@@ -188,13 +188,13 @@ contract BoostManager is Ownable {
         require(marketType <= 1, "wrong market type");
 
         if (marketType == 0) {
-            if (IoToken(market).totalSupply() == 0) return 0; // nothing to calculate if market is empty
+            if (IOToken(market).totalSupply() == 0) return 0; // nothing to calculate if market is empty
             return ((veOVIX.totalSupply() * MULTIPLIER) / // todo: check correctness of zero balance handling
-                IoToken(market).totalSupply()); // todo
+                IOToken(market).totalSupply()); // todo
         } else {
-            if (IoToken(market).totalBorrows() == 0) return 0;
+            if (IOToken(market).totalBorrows() == 0) return 0;
             return ((veOVIX.totalSupply() * MULTIPLIER) / // todo
-                IoToken(market).totalBorrows()); // todo
+                IOToken(market).totalBorrows()); // todo
         }
     }
 
@@ -232,7 +232,7 @@ contract BoostManager is Ownable {
             calcBoostedBalance(
                 user,
                 supplyBoosterBasis[market][user],
-                IoToken(market).balanceOf(user)
+                IOToken(market).balanceOf(user)
             )
         );
     }
@@ -246,7 +246,7 @@ contract BoostManager is Ownable {
             calcBoostedBalance(
                 user,
                 borrowBoosterBasis[market][user],
-                IoToken(market).borrowBalanceStored(user)
+                IOToken(market).borrowBalanceStored(user)
             )
         );
     }
@@ -256,7 +256,7 @@ contract BoostManager is Ownable {
         view
         returns (uint256)
     {
-        return (IoToken(market).totalSupply() + deltaTotalSupply[market]);
+        return (IOToken(market).totalSupply() + deltaTotalSupply[market]);
     }
 
     function boostedTotalBorrows(address market)
@@ -264,7 +264,7 @@ contract BoostManager is Ownable {
         view
         returns (uint256)
     {
-        return (IoToken(market).totalBorrows() + deltaTotalBorrows[market]);
+        return (IOToken(market).totalBorrows() + deltaTotalBorrows[market]);
     }
 
     function setAuthorized(address addr, bool flag) external onlyOwner {

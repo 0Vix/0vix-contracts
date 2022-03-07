@@ -1,6 +1,6 @@
 pragma solidity 0.8.4;
 
-import "./OToken.sol";
+import "./abstract/OToken.sol";
 
 /**
  * @title 0VIX's OMatic Contract
@@ -10,7 +10,6 @@ import "./OToken.sol";
 contract OMatic is OToken {
 
     bool public isInit = true;  // init lock, only proxy can run init
-    constructor() {}
 
     /**
      * @notice Construct a new OMatic money market
@@ -23,8 +22,8 @@ contract OMatic is OToken {
      * @param admin_ Address of the administrator of this token
      */
     function init(
-        ComptrollerInterface comptroller_,
-        InterestRateModel interestRateModel_,
+        IComptroller comptroller_,
+        IInterestRateModel interestRateModel_,
         uint256 initialExchangeRateMantissa_,
         string memory name_,
         string memory symbol_,
