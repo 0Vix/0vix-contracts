@@ -15,7 +15,7 @@ contract Maximillion {
     /**
      * @notice Construct a Maximillion to repay max in a OMatic market
      */
-    constructor(OMatic oMatic_) public {
+    constructor(OMatic oMatic_) {
         oMatic = oMatic_;
     }
 

@@ -107,6 +107,7 @@ interface IOToken is IEIP20{
     function totalBorrows() external view returns(uint);
     function comptroller() external view returns(IComptroller);
     function borrowIndex() external view returns(uint);
+    function reserveFactorMantissa() external view returns(uint);
 
 
     /*** Admin Functions ***/

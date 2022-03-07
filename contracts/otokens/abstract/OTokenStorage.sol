@@ -69,7 +69,7 @@ abstract contract OTokenStorage is IOToken {
     /**
      * @notice Fraction of interest currently set aside for reserves
      */
-    uint public reserveFactorMantissa;
+    uint public override reserveFactorMantissa;
 
     /**
      * @notice Block number that interest was last accrued at

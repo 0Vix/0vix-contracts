@@ -75,9 +75,9 @@ interface IComptroller {
         address borrower
     ) external;
 
-    function _setRewardSpeed(
-        uint8 rewardType,
-        address oToken,
-        uint256 rewardSpeed
+    function _setRewardSpeeds(
+        address[] memory oTokens,
+        uint256[] memory supplySpeeds,
+        uint256[] memory borrowSpeeds
     ) external;
 }
