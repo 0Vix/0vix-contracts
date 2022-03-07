@@ -646,7 +646,14 @@ contract VoteController {
             uint256 reward = ((fixedAmount *
                 fixedRewardWeights[markets.at(i)]) / HUNDRED_PERCENT) +
                 ((votableAmount * relWeight) / 1e18);
-            comp._setRewardSpeed(0, addr, reward);
+
+            address[] memory addrs = new address[](1);
+            addrs[0] = addr;
+
+            uint256[] memory rewards = new uint256[](1);
+            rewards[0] = reward;
+
+            comp._setRewardSpeeds(addrs, rewards, rewards);
             updates.push(Updated(addr, reward, block.timestamp));
         }
 
