@@ -69,8 +69,13 @@ contract ComptrollerV2Storage is ComptrollerV1Storage {
     bool public _borrowGuardianPaused;
     bool public transferGuardianPaused;
     bool public seizeGuardianPaused;
-    mapping(address => bool) public mintGuardianPaused;
-    mapping(address => bool) public borrowGuardianPaused;
+    
+    struct PauseData {
+        bool mint;
+        bool borrow;
+    }
+
+    mapping(address => PauseData) public guardianPaused;
 }
 
 contract ComptrollerV3Storage is ComptrollerV2Storage {

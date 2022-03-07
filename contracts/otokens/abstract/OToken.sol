@@ -1745,10 +1745,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
             seizeTokens,
             Exp({mantissa: protocolSeizeShareMantissa})
         );
-        vars.liquidatorSeizeTokens = sub_(
-            seizeTokens,
-            vars.protocolSeizeTokens
-        );
+        vars.liquidatorSeizeTokens = seizeTokens - vars.protocolSeizeTokens;
 
         (
             vars.mathErr,
@@ -1761,8 +1758,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
             vars.protocolSeizeTokens
         );
 
-        vars.totalReservesNew = add_(totalReserves, vars.protocolSeizeAmount);
-        vars.totalSupplyNew = sub_(totalSupply, vars.protocolSeizeTokens);
+        vars.totalReservesNew = totalReserves + vars.protocolSeizeAmount;
+        vars.totalSupplyNew = totalSupply - vars.protocolSeizeTokens;
 
         (vars.mathErr, vars.liquidatorTokensNew) = addUInt(
             accountTokens[liquidator],

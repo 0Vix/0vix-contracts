@@ -336,7 +336,7 @@ contract Comptroller is
         uint256 mintAmount
     ) external override returns (uint256) {
         // Pausing is a very serious situation - we revert to sound the alarms
-        require(!mintGuardianPaused[oToken], "mint is paused");
+        require(!guardianPaused[oToken].mint, "mint is paused");
 
         // Shh - currently unused
         minter;
@@ -475,7 +475,7 @@ contract Comptroller is
         uint256 borrowAmount
     ) external override returns (uint256) {
         // Pausing is a very serious situation - we revert to sound the alarms
-        require(!borrowGuardianPaused[oToken], "borrow is paused");
+        require(!guardianPaused[oToken].borrow, "borrow is paused");
 
         if (!markets[oToken].isListed) {
             return uint256(Error.MARKET_NOT_LISTED);
@@ -502,7 +502,7 @@ contract Comptroller is
         uint256 borrowCap = borrowCaps[oToken];
         // Borrow cap of 0 corresponds to unlimited borrowing
         if (borrowCap != 0) {
-            require(add_(IOToken(oToken).totalBorrows(), borrowAmount) < borrowCap, "borrow cap reached");
+            require((IOToken(oToken).totalBorrows() + borrowAmount) < borrowCap, "borrow cap reached");
         }
 
         (
@@ -1412,7 +1412,7 @@ contract Comptroller is
         onlyAdminOrGuardian();
         require(msg.sender == admin || state == true, "only admin can unpause");
 
-        mintGuardianPaused[address(oToken)] = state;
+        guardianPaused[address(oToken)].mint = state;
         emit ActionPaused(oToken, "Mint", state);
         return state;
     }
@@ -1425,7 +1425,7 @@ contract Comptroller is
         onlyAdminOrGuardian();
         require(msg.sender == admin || state == true, "only admin can unpause");
 
-        borrowGuardianPaused[address(oToken)] = state;
+        guardianPaused[address(oToken)].borrow = state;
         emit ActionPaused(oToken, "Borrow", state);
         return state;
     }
@@ -1491,7 +1491,7 @@ contract Comptroller is
                 uint256 accountReceivable = amountToSubtract - currentAccrual; // Underflow safe since amountToSubtract > currentAccrual
 
                 uint256 oldReceivable = rewardReceivable[user];
-                uint256 newReceivable = add_(oldReceivable, accountReceivable);
+                uint256 newReceivable = oldReceivable + accountReceivable;
 
                 // Accounting: record the Reward debt for the user
                 rewardReceivable[user] = newReceivable;
@@ -1508,10 +1508,7 @@ contract Comptroller is
             if (amountToSubtract > 0) {
                 // Subtract the bad accrual amount from what they have accrued.
                 // Users will keep whatever they have correctly accrued.
-                rewardAccrued[user] = newAccrual = sub_(
-                    currentAccrual,
-                    amountToSubtract
-                );
+                rewardAccrued[user] = newAccrual = currentAccrual - amountToSubtract;
 
                 emit RewardAccruedAdjusted(user, currentAccrual, newAccrual);
             }
@@ -1598,13 +1595,10 @@ contract Comptroller is
             getTimestamp(),
             "timestamp number exceeds 32 bits"
         );
-        uint256 deltaBlocks = sub_(
-            uint256(timestamp),
-            uint256(supplyState.timestamp)
-        );
+        uint256 deltaBlocks = uint256(timestamp) - uint256(supplyState.timestamp);
         if (deltaBlocks > 0 && supplySpeed > 0) {
             uint256 supplyTokens = boostManager.boostedTotalSupply(oToken);
-            uint256 rewardAccrued = mul_(deltaBlocks, supplySpeed);
+            uint256 rewardAccrued = deltaBlocks * supplySpeed;
             Double memory ratio = supplyTokens > 0
                 ? fraction(rewardAccrued, supplyTokens)
                 : Double({mantissa: 0});
@@ -1633,16 +1627,13 @@ contract Comptroller is
             getTimestamp(),
             "timestamp number exceeds 32 bits"
         );
-        uint256 deltaBlocks = sub_(
-            uint256(timestamp),
-            uint256(borrowState.timestamp)
-        );
+        uint256 deltaBlocks = uint256(timestamp) - uint256(borrowState.timestamp);
         if (deltaBlocks > 0 && borrowSpeed > 0) {
             uint256 borrowAmount = div_(
                 boostManager.boostedTotalBorrows(oToken),
                 marketBorrowIndex
             );
-            uint256 rewardAccrued = mul_(deltaBlocks, borrowSpeed);
+            uint256 rewardAccrued = deltaBlocks * borrowSpeed;
             Double memory ratio = borrowAmount > 0
                 ? fraction(rewardAccrued, borrowAmount)
                 : Double({mantissa: 0});
@@ -1684,7 +1675,7 @@ contract Comptroller is
 
         // Calculate change in the cumulative sum of the Reward per oToken accrued
         Double memory deltaIndex = Double({
-            mantissa: sub_(supplyIndex, supplierIndex)
+            mantissa: supplyIndex - supplierIndex
         });
 
         uint256 supplierTokens = boostManager.boostedSupplyBalanceOf(
@@ -1695,7 +1686,7 @@ contract Comptroller is
         // Calculate Reward accrued: oTokenAmount * accruedPerOToken
         uint256 supplierDelta = mul_(supplierTokens, deltaIndex);
 
-        uint256 supplierAccrued = add_(rewardAccrued[supplier], supplierDelta);
+        uint256 supplierAccrued = rewardAccrued[supplier] + supplierDelta;
         rewardAccrued[supplier] = supplierAccrued;
 
         emit DistributedSupplierReward(
@@ -1737,7 +1728,7 @@ contract Comptroller is
 
         // Calculate change in the cumulative sum of the Reward per borrowed unit accrued
         Double memory deltaIndex = Double({
-            mantissa: sub_(borrowIndex, borrowerIndex)
+            mantissa: borrowIndex - borrowerIndex
         });
 
         uint256 borrowerAmount = div_(
@@ -1748,7 +1739,7 @@ contract Comptroller is
         // Calculate Reward accrued: oTokenAmount * accruedPerBorrowedUnit
         uint256 borrowerDelta = mul_(borrowerAmount, deltaIndex);
 
-        uint256 borrowerAccrued = add_(rewardAccrued[borrower], borrowerDelta);
+        uint256 borrowerAccrued = rewardAccrued[borrower] + borrowerDelta;
         rewardAccrued[borrower] = borrowerAccrued;
 
         emit DistributedBorrowerReward(
@@ -1766,16 +1757,10 @@ contract Comptroller is
     function updateContributorRewards(address contributor) public {
         uint256 rewardSpeed = rewardContributorSpeeds[contributor];
         uint256 timestamp = getTimestamp();
-        uint256 deltaBlocks = sub_(
-            timestamp,
-            lastContributorTimestamp[contributor]
-        );
+        uint256 deltaBlocks = timestamp - lastContributorTimestamp[contributor];
         if (deltaBlocks > 0 && rewardSpeed > 0) {
-            uint256 newAccrued = mul_(deltaBlocks, rewardSpeed);
-            uint256 contributorAccrued = add_(
-                rewardAccrued[contributor],
-                newAccrued
-            );
+            uint256 newAccrued = deltaBlocks * rewardSpeed;
+            uint256 contributorAccrued = rewardAccrued[contributor] + newAccrued;
 
             rewardAccrued[contributor] = contributorAccrued;
             lastContributorTimestamp[contributor] = timestamp;
@@ -1966,7 +1951,7 @@ contract Comptroller is
     function isDeprecated(IOToken oToken) public view returns (bool) {
         return
             markets[address(oToken)].collateralFactorMantissa == 0 &&
-            borrowGuardianPaused[address(oToken)] == true &&
+            guardianPaused[address(oToken)].borrow == true &&
             oToken.reserveFactorMantissa() == 1e18;
     }
 
