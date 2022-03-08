@@ -1863,7 +1863,7 @@ contract Comptroller is
         address[] memory oTokens,
         uint256[] memory supplySpeeds,
         uint256[] memory borrowSpeeds
-    ) public {
+    ) public override {
         require(msg.sender == admin || msg.sender == rewardUpdater, "only admin can set reward speed");
 
         uint256 numTokens = oTokens.length;
