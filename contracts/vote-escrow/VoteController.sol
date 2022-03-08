@@ -1,11 +1,10 @@
 //SPDX-License-Identifier: MIT
 pragma solidity =0.8.4;
 
-import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import "./interfaces/IVotingEscrow.sol";
-import "./interfaces/IBoostManager.sol";
-
-import "../interfaces/IComptroller.sol";
+import "../interfaces/IVotingEscrow.sol";
+import { IBoostManager450 as IBoostManager } from "../IBoostManager@0.8.4.sol";
+import "../openzeppelin@4.5.0/utils/structs/EnumerableSet.sol";
+import "./IComptroller.sol";
 
 
 /**
@@ -711,6 +710,10 @@ contract VoteController {
 
     function numMarkets() external view returns (uint256) {
         return markets.length();
+    }
+
+    function isMarketListed(address _market) external view returns(bool) {
+        return markets.contains(_market);
     }
 
     // dev functions
