@@ -9,7 +9,7 @@ import "./abstract/OErc20Storage.sol";
  * @author 0VIX
  */
 contract OErc20 is OToken, OErc20Storage {
-    bool isInit = true;
+    bool public isInit = true;
 
     /**
      * @notice Initialize the new money market

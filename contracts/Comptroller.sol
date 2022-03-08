@@ -1,7 +1,8 @@
-pragma solidity 0.5.17;
+pragma solidity 0.8.4;
 
-import "./ErrorReporter.sol";
-import "./ComptrollerInterface.sol";
+import "./libraries/ErrorReporter.sol";
+import "./libraries/ExponentialNoError.sol";
+import "./interfaces/IComptroller.sol";
 import "./ComptrollerStorage.sol";
 
 interface IOvix {
@@ -22,7 +23,7 @@ interface IUnitroller {
  */
 contract Comptroller is
     ComptrollerV7Storage,
-    ComptrollerInterface,
+    IComptroller,
     ComptrollerErrorReporter,
     ExponentialNoError
 {
@@ -30,13 +31,13 @@ contract Comptroller is
     event RewardUpdaterModified(address _rewardUpdater);
 
     /// @notice Emitted when an admin supports a market
-    event MarketListed(OToken oToken);
+    event MarketListed(IOToken oToken);
 
     /// @notice Emitted when an account enters a market
-    event MarketEntered(OToken oToken, address account);
+    event MarketEntered(IOToken oToken, address account);
 
     /// @notice Emitted when an account exits a market
-    event MarketExited(OToken oToken, address account);
+    event MarketExited(IOToken oToken, address account);
 
     /// @notice Emitted when close factor is changed by admin
     event NewCloseFactor(
@@ -46,7 +47,7 @@ contract Comptroller is
 
     /// @notice Emitted when a collateral factor is changed by admin
     event NewCollateralFactor(
-        OToken oToken,
+        IOToken oToken,
         uint256 oldCollateralFactorMantissa,
         uint256 newCollateralFactorMantissa
     );
@@ -70,13 +71,13 @@ contract Comptroller is
     event ActionPaused(string action, bool pauseState);
 
     /// @notice Emitted when an action is paused on a market
-    event ActionPaused(OToken oToken, string action, bool pauseState);
+    event ActionPaused(IOToken oToken, string action, bool pauseState);
 
     /// @notice Emitted when a new borrow-side Reward speed is calculated for a market
-    event RewardBorrowSpeedUpdated(OToken indexed oToken, uint256 newSpeed);
+    event RewardBorrowSpeedUpdated(IOToken indexed oToken, uint256 newSpeed);
 
     /// @notice Emitted when a new supply-side Reward speed is calculated for a market
-    event RewardSupplySpeedUpdated(OToken indexed oToken, uint256 newSpeed);
+    event RewardSupplySpeedUpdated(IOToken indexed oToken, uint256 newSpeed);
 
     /// @notice Emitted when a new Reward speed is set for a contributor
     event ContributorRewardSpeedUpdated(
@@ -86,7 +87,7 @@ contract Comptroller is
 
     /// @notice Emitted when VIX is distributed to a supplier
     event DistributedSupplierReward(
-        OToken indexed oToken,
+        IOToken indexed oToken,
         address indexed supplier,
         uint256 tokenDelta,
         uint256 tokenSupplyIndex
@@ -94,14 +95,14 @@ contract Comptroller is
 
     /// @notice Emitted when VIX is distributed to a borrower
     event DistributedBorrowerReward(
-        OToken indexed oToken,
+        IOToken indexed oToken,
         address indexed borrower,
         uint256 tokenDelta,
         uint256 tokenBorrowIndex
     );
 
     /// @notice Emitted when borrow cap for a oToken is changed
-    event NewBorrowCap(OToken indexed oToken, uint256 newBorrowCap);
+    event NewBorrowCap(IOToken indexed oToken, uint256 newBorrowCap);
 
     /// @notice Emitted when borrow cap guardian is changed
     event NewBorrowCapGuardian(
@@ -126,6 +127,8 @@ contract Comptroller is
         uint256 newRewardReceivable
     );
 
+    bool public constant override isComptroller = true;
+
     /// @notice The initial Reward index for a market
     uint224 public constant marketInitialIndex = 1e36;
 
@@ -146,7 +149,7 @@ contract Comptroller is
         _;
     }
 
-    constructor() public {
+    constructor() {
         admin = msg.sender;
     }
 
@@ -160,11 +163,18 @@ contract Comptroller is
     function getAssetsIn(address account)
         external
         view
-        returns (OToken[] memory)
+        returns (IOToken[] memory)
     {
-        OToken[] memory assetsIn = accountAssets[account];
+        return accountAssets[account];
+    }
 
-        return assetsIn;
+    /**
+     * @notice Returns whether the given token is listed market
+     * @param oToken The oToken to check
+     * @return True if is market, otherwise false.
+     */
+    function isMarket(address oToken) external view override returns(bool) {
+        return markets[oToken].isListed;
     }
 
     /**
@@ -173,12 +183,12 @@ contract Comptroller is
      * @param oToken The oToken to check
      * @return True if the account is in the asset, otherwise false.
      */
-    function checkMembership(address account, OToken oToken)
+    function checkMembership(address account, IOToken oToken)
         external
         view
         returns (bool)
     {
-        return markets[address(oToken)].accountMembership[account];
+        return accountMembership[address(oToken)][account];
     }
 
     /**
@@ -188,15 +198,14 @@ contract Comptroller is
      */
     function enterMarkets(address[] memory oTokens)
         public
+        override
         returns (uint256[] memory)
     {
         uint256 len = oTokens.length;
 
         uint256[] memory results = new uint256[](len);
         for (uint256 i = 0; i < len; i++) {
-            OToken oToken = OToken(oTokens[i]);
-
-            results[i] = uint256(addToMarketInternal(oToken, msg.sender));
+            results[i] = uint256(addToMarketInternal(IOToken(oTokens[i]), msg.sender));
         }
 
         return results;
@@ -208,18 +217,16 @@ contract Comptroller is
      * @param borrower The address of the account to modify
      * @return Success indicator for whether the market was entered
      */
-    function addToMarketInternal(OToken oToken, address borrower)
+    function addToMarketInternal(IOToken oToken, address borrower)
         internal
         returns (Error)
     {
-        Market storage marketToJoin = markets[address(oToken)];
-
-        if (!marketToJoin.isListed) {
+        if (!markets[address(oToken)].isListed) {
             // market is not listed, cannot join
             return Error.MARKET_NOT_LISTED;
         }
 
-        if (marketToJoin.accountMembership[borrower] == true) {
+        if (accountMembership[address(oToken)][borrower]) {
             // already joined
             return Error.NO_ERROR;
         }
@@ -229,7 +236,7 @@ contract Comptroller is
         //  this avoids having to iterate through the list for the most common use cases
         //  that is, only when we need to perform liquidity checks
         //  and not whenever we want to check if an account is in a particular market
-        marketToJoin.accountMembership[borrower] = true;
+        accountMembership[address(oToken)][borrower] = true;
         accountAssets[borrower].push(oToken);
 
         emit MarketEntered(oToken, borrower);
@@ -244,8 +251,8 @@ contract Comptroller is
      * @param oTokenAddress The address of the asset to be removed
      * @return Whether or not the account successfully exited the market
      */
-    function exitMarket(address oTokenAddress) external returns (uint256) {
-        OToken oToken = OToken(oTokenAddress);
+    function exitMarket(address oTokenAddress) external override returns (uint256) {
+        IOToken oToken = IOToken(oTokenAddress);
         /* Get sender tokensHeld and amountOwed underlying from the oToken */
         (uint256 oErr, uint256 tokensHeld, uint256 amountOwed, ) = oToken
             .getAccountSnapshot(msg.sender);
@@ -275,19 +282,17 @@ contract Comptroller is
                 );
         }
 
-        Market storage marketToExit = markets[address(oToken)];
-
         /* Return true if the sender is not already ‘in’ the market */
-        if (!marketToExit.accountMembership[msg.sender]) {
+        if (!accountMembership[address(oToken)][msg.sender]) {
             return uint256(Error.NO_ERROR);
         }
 
         /* Set oToken account membership to false */
-        delete marketToExit.accountMembership[msg.sender];
+        delete accountMembership[address(oToken)][msg.sender];
 
         /* Delete oToken from the account’s list of assets */
         // load into memory for faster iteration
-        OToken[] memory userAssetList = accountAssets[msg.sender];
+        IOToken[] memory userAssetList = accountAssets[msg.sender];
         uint256 len = userAssetList.length;
         uint256 assetIndex = len;
         for (uint256 i = 0; i < len; i++) {
@@ -301,9 +306,9 @@ contract Comptroller is
         assert(assetIndex < len);
 
         // copy last item in list to location of item to be removed, reduce length by 1
-        OToken[] storage storedList = accountAssets[msg.sender];
+        IOToken[] storage storedList = accountAssets[msg.sender];
         storedList[assetIndex] = storedList[storedList.length - 1];
-        storedList.length--;
+        storedList.pop();
 
         emit MarketExited(oToken, msg.sender);
 
@@ -323,9 +328,9 @@ contract Comptroller is
         address oToken,
         address minter,
         uint256 mintAmount
-    ) external returns (uint256) {
+    ) external override returns (uint256) {
         // Pausing is a very serious situation - we revert to sound the alarms
-        require(!mintGuardianPaused[oToken], "mint is paused");
+        require(!guardianPaused[oToken].mint, "mint is paused");
 
         // Shh - currently unused
         minter;
@@ -355,7 +360,7 @@ contract Comptroller is
         address minter,
         uint256 actualMintAmount,
         uint256 mintTokens
-    ) external {
+    ) external override {
         // Shh - currently unused
         oToken;
         minter;
@@ -379,7 +384,7 @@ contract Comptroller is
         address oToken,
         address redeemer,
         uint256 redeemTokens
-    ) external returns (uint256) {
+    ) external override returns (uint256) {
         uint256 allowed = redeemAllowedInternal(oToken, redeemer, redeemTokens);
         if (allowed != uint256(Error.NO_ERROR)) {
             return allowed;
@@ -403,7 +408,7 @@ contract Comptroller is
         }
 
         /* If the redeemer is not 'in' the market, then we can bypass the liquidity check */
-        if (!markets[oToken].accountMembership[redeemer]) {
+        if (!accountMembership[oToken][redeemer]) {
             return uint256(Error.NO_ERROR);
         }
 
@@ -414,7 +419,7 @@ contract Comptroller is
             uint256 shortfall
         ) = getHypotheticalAccountLiquidityInternal(
                 redeemer,
-                OToken(oToken),
+                IOToken(oToken),
                 redeemTokens,
                 0
             );
@@ -440,15 +445,13 @@ contract Comptroller is
         address redeemer,
         uint256 redeemAmount,
         uint256 redeemTokens
-    ) external {
+    ) external override {
         // Shh - currently unused
         oToken;
         redeemer;
 
         // Require tokens is zero or amount is also zero
-        if (redeemTokens == 0 && redeemAmount > 0) {
-            revert("redeemTokens zero");
-        }
+        require(redeemTokens != 0 || redeemAmount == 0, "redeemTokens zero");
     }
 
     /**
@@ -462,38 +465,36 @@ contract Comptroller is
         address oToken,
         address borrower,
         uint256 borrowAmount
-    ) external returns (uint256) {
+    ) external override returns (uint256) {
         // Pausing is a very serious situation - we revert to sound the alarms
-        require(!borrowGuardianPaused[oToken], "borrow is paused");
+        require(!guardianPaused[oToken].borrow, "borrow is paused");
 
         if (!markets[oToken].isListed) {
             return uint256(Error.MARKET_NOT_LISTED);
         }
 
-        if (!markets[oToken].accountMembership[borrower]) {
+        if (!accountMembership[oToken][borrower]) {
             // only oTokens may call borrowAllowed if borrower not in market
             require(msg.sender == oToken, "sender must be oToken");
 
             // attempt to add borrower to the market
-            Error err = addToMarketInternal(OToken(msg.sender), borrower);
+            Error err = addToMarketInternal(IOToken(msg.sender), borrower);
             if (err != Error.NO_ERROR) {
                 return uint256(err);
             }
 
             // it should be impossible to break the important invariant
-            assert(markets[oToken].accountMembership[borrower]);
+            assert(accountMembership[oToken][borrower]);
         }
 
-        if (oracle.getUnderlyingPrice(OToken(oToken)) == 0) {
+        if (oracle.getUnderlyingPrice(IOToken(oToken)) == 0) {
             return uint256(Error.PRICE_ERROR);
         }
 
         uint256 borrowCap = borrowCaps[oToken];
         // Borrow cap of 0 corresponds to unlimited borrowing
         if (borrowCap != 0) {
-            uint256 totalBorrows = OToken(oToken).totalBorrows();
-            uint256 nextTotalBorrows = add_(totalBorrows, borrowAmount);
-            require(nextTotalBorrows < borrowCap, "market borrow cap reached");
+            require((IOToken(oToken).totalBorrows() + borrowAmount) < borrowCap, "borrow cap reached");
         }
 
         (
@@ -502,10 +503,11 @@ contract Comptroller is
             uint256 shortfall
         ) = getHypotheticalAccountLiquidityInternal(
                 borrower,
-                OToken(oToken),
+                IOToken(oToken),
                 0,
                 borrowAmount
             );
+
         if (err != Error.NO_ERROR) {
             return uint256(err);
         }
@@ -514,7 +516,7 @@ contract Comptroller is
         }
 
         // Keep the flywheel moving
-        // Exp memory borrowIndex = Exp({mantissa: OToken(oToken).borrowIndex()});
+        // Exp memory borrowIndex = Exp({mantissa: IOToken(oToken).borrowIndex()});
         // updateRewardBorrowIndex(oToken, borrowIndex); //todo: remove
         // distributeBorrowerReward(oToken, borrower, borrowIndex);
 
@@ -533,7 +535,7 @@ contract Comptroller is
         address oToken,
         address borrower,
         uint256 borrowAmount
-    ) external {
+    ) external override {
         // Shh - currently unused
         oToken;
         borrower;
@@ -558,7 +560,7 @@ contract Comptroller is
         address payer,
         address borrower,
         uint256 repayAmount
-    ) external returns (uint256) {
+    ) external override returns (uint256) {
         // Shh - currently unused
         payer;
         borrower;
@@ -569,7 +571,7 @@ contract Comptroller is
         }
 
         // Keep the flywheel moving
-        // Exp memory borrowIndex = Exp({mantissa: OToken(oToken).borrowIndex()});
+        // Exp memory borrowIndex = Exp({mantissa: IOToken(oToken).borrowIndex()});
         // updateRewardBorrowIndex(oToken, borrowIndex); //todo: rmeove
         // distributeBorrowerReward(oToken, borrower, borrowIndex);
 
@@ -619,7 +621,7 @@ contract Comptroller is
         address liquidator,
         address borrower,
         uint256 repayAmount
-    ) external returns (uint256) {
+    ) external override returns (uint256) {
         // Shh - currently unused
         liquidator;
 
@@ -630,21 +632,25 @@ contract Comptroller is
             return uint256(Error.MARKET_NOT_LISTED);
         }
 
-        uint256 borrowBalance = OToken(oTokenBorrowed).borrowBalanceStored(
+        uint256 borrowBalance = IOToken(oTokenBorrowed).borrowBalanceStored(
             borrower
         );
 
         /* allow accounts to be liquidated if the market is deprecated */
-        if (isDeprecated(OToken(oTokenBorrowed))) {
+        if (isDeprecated(IOToken(oTokenBorrowed))) {
             require(
                 borrowBalance >= repayAmount,
                 "Can not repay more than the total borrow"
             );
         } else {
             /* The borrower must have shortfall in order to be liquidatable */
-            (Error err, , uint256 shortfall) = getAccountLiquidityInternal(
-                borrower
+            (Error err, , uint256 shortfall) = getHypotheticalAccountLiquidityInternal(
+                borrower, 
+                IOToken(address(0)), 
+                0, 
+                0
             );
+
             if (err != Error.NO_ERROR) {
                 return uint256(err);
             }
@@ -709,7 +715,7 @@ contract Comptroller is
         address liquidator,
         address borrower,
         uint256 seizeTokens
-    ) external returns (uint256) {
+    ) external override returns (uint256) {
         // Pausing is a very serious situation - we revert to sound the alarms
         require(!seizeGuardianPaused, "seize is paused");
 
@@ -724,8 +730,8 @@ contract Comptroller is
         }
 
         if (
-            OToken(oTokenCollateral).comptroller() !=
-            OToken(oTokenBorrowed).comptroller()
+            IOToken(oTokenCollateral).comptroller() !=
+            IOToken(oTokenBorrowed).comptroller()
         ) {
             return uint256(Error.COMPTROLLER_MISMATCH);
         }
@@ -752,7 +758,7 @@ contract Comptroller is
         address liquidator,
         address borrower,
         uint256 seizeTokens
-    ) external {
+    ) external override {
         // Shh - currently unused
         oTokenCollateral;
         oTokenBorrowed;
@@ -779,7 +785,7 @@ contract Comptroller is
         address src,
         address dst,
         uint256 transferTokens
-    ) external returns (uint256) {
+    ) external override returns (uint256) {
         // Pausing is a very serious situation - we revert to sound the alarms
         require(!transferGuardianPaused, "transfer is paused");
 
@@ -812,7 +818,7 @@ contract Comptroller is
         address src,
         address dst,
         uint256 transferTokens
-    ) external {
+    ) external override {
         // Shh - currently unused
         oToken;
         src;
@@ -864,28 +870,9 @@ contract Comptroller is
             Error err,
             uint256 liquidity,
             uint256 shortfall
-        ) = getHypotheticalAccountLiquidityInternal(account, OToken(0), 0, 0);
+        ) = getHypotheticalAccountLiquidityInternal(account, IOToken(address(0)), 0, 0);
 
         return (uint256(err), liquidity, shortfall);
-    }
-
-    /**
-     * @notice Determine the current account liquidity wrt collateral requirements
-     * @return (possible error code,
-                account liquidity in excess of collateral requirements,
-     *          account shortfall below collateral requirements)
-     */
-    function getAccountLiquidityInternal(address account)
-        internal
-        view
-        returns (
-            Error,
-            uint256,
-            uint256
-        )
-    {
-        return
-            getHypotheticalAccountLiquidityInternal(account, OToken(0), 0, 0);
     }
 
     /**
@@ -918,7 +905,7 @@ contract Comptroller is
             uint256 shortfall
         ) = getHypotheticalAccountLiquidityInternal(
                 account,
-                OToken(oTokenModify),
+                IOToken(oTokenModify),
                 redeemTokens,
                 borrowAmount
             );
@@ -939,7 +926,7 @@ contract Comptroller is
      */
     function getHypotheticalAccountLiquidityInternal(
         address account,
-        OToken oTokenModify,
+        IOToken oTokenModify,
         uint256 redeemTokens,
         uint256 borrowAmount
     )
@@ -955,9 +942,9 @@ contract Comptroller is
         uint256 oErr;
 
         // For each asset the account is in
-        OToken[] memory assets = accountAssets[account];
+        IOToken[] memory assets = accountAssets[account];
         for (uint256 i = 0; i < assets.length; i++) {
-            OToken asset = assets[i];
+            IOToken asset = assets[i];
 
             // Read the balances and exchange rate from the oToken
             (
@@ -1023,18 +1010,20 @@ contract Comptroller is
         }
 
         // These are safe, as the underflow condition is checked first
-        if (vars.sumCollateral > vars.sumBorrowPlusEffects) {
-            return (
-                Error.NO_ERROR,
-                vars.sumCollateral - vars.sumBorrowPlusEffects,
-                0
-            );
-        } else {
-            return (
-                Error.NO_ERROR,
-                0,
-                vars.sumBorrowPlusEffects - vars.sumCollateral
-            );
+        unchecked {
+            if (vars.sumCollateral > vars.sumBorrowPlusEffects) {
+                return (
+                    Error.NO_ERROR,
+                    vars.sumCollateral - vars.sumBorrowPlusEffects,
+                    0
+                );
+            } else {
+                return (
+                    Error.NO_ERROR,
+                    0,
+                    vars.sumBorrowPlusEffects - vars.sumCollateral
+                );
+            }
         }
     }
 
@@ -1050,14 +1039,15 @@ contract Comptroller is
         address oTokenBorrowed,
         address oTokenCollateral,
         uint256 actualRepayAmount
-    ) external view returns (uint256, uint256) {
+    ) external view override returns (uint256, uint256) {
         /* Read oracle prices for borrowed and collateral markets */
         uint256 priceBorrowedMantissa = oracle.getUnderlyingPrice(
-            OToken(oTokenBorrowed)
+            IOToken(oTokenBorrowed)
         );
         uint256 priceCollateralMantissa = oracle.getUnderlyingPrice(
-            OToken(oTokenCollateral)
+            IOToken(oTokenCollateral)
         );
+
         if (priceBorrowedMantissa == 0 || priceCollateralMantissa == 0) {
             return (uint256(Error.PRICE_ERROR), 0);
         }
@@ -1068,24 +1058,14 @@ contract Comptroller is
          *  seizeTokens = seizeAmount / exchangeRate
          *   = actualRepayAmount * (liquidationIncentive * priceBorrowed) / (priceCollateral * exchangeRate)
          */
-        uint256 exchangeRateMantissa = OToken(oTokenCollateral)
+        uint256 exchangeRateMantissa = IOToken(oTokenCollateral)
             .exchangeRateStored(); // Note: reverts on error
-        uint256 seizeTokens;
-        Exp memory numerator;
-        Exp memory denominator;
-        Exp memory ratio;
 
-        numerator = mul_(
-            Exp({mantissa: liquidationIncentiveMantissa}),
-            Exp({mantissa: priceBorrowedMantissa})
-        );
-        denominator = mul_(
-            Exp({mantissa: priceCollateralMantissa}),
-            Exp({mantissa: exchangeRateMantissa})
-        );
-        ratio = div_(numerator, denominator);
+        Exp memory numerator = mul_(Exp({mantissa: liquidationIncentiveMantissa}), Exp({mantissa: priceBorrowedMantissa}));
+        Exp memory denominator = mul_(Exp({mantissa: priceCollateralMantissa}), Exp({mantissa: exchangeRateMantissa}));
+        Exp memory ratio = div_(numerator, denominator);
 
-        seizeTokens = mul_ScalarTruncate(ratio, actualRepayAmount);
+        uint256 seizeTokens = mul_ScalarTruncate(ratio, actualRepayAmount);
 
         return (uint256(Error.NO_ERROR), seizeTokens);
     }
@@ -1100,7 +1080,7 @@ contract Comptroller is
     function _setPriceOracle(PriceOracle newOracle) public returns (uint256) {
         // Check caller is admin
         if (msg.sender != admin) {
-            return
+            return // TODO can be optimized
                 fail(
                     Error.UNAUTHORIZED,
                     FailureInfo.SET_PRICE_ORACLE_OWNER_CHECK
@@ -1148,7 +1128,7 @@ contract Comptroller is
      * @return uint 0=success, otherwise a failure. (See ErrorReporter for details)
      */
     function _setCollateralFactor(
-        OToken oToken,
+        IOToken oToken,
         uint256 newCollateralFactorMantissa
     ) external returns (uint256) {
         // Check caller is admin
@@ -1250,7 +1230,7 @@ contract Comptroller is
      * @param oToken The address of the market (token) to list
      * @return uint 0=success, otherwise a failure. (See enum Error for details)
      */
-    function _supportMarket(OToken oToken) external returns (uint256) {
+    function _supportMarket(IOToken oToken) external returns (uint256) {
         if (msg.sender != admin) {
             return
                 fail(
@@ -1267,7 +1247,7 @@ contract Comptroller is
                 );
         }
 
-        oToken.isOToken(); // Sanity check to make sure its really a OToken
+        oToken.isOToken(); // Sanity check to make sure its really a IOToken
 
         // Note that isOed is not in active use anymore
         markets[address(oToken)] = Market({
@@ -1286,13 +1266,14 @@ contract Comptroller is
 
     function _addMarketInternal(address oToken) internal {
         for (uint256 i = 0; i < allMarkets.length; i++) {
-            require(allMarkets[i] != OToken(oToken), "market already added");
+            require(allMarkets[i] != IOToken(oToken), "market already added");
         }
-        allMarkets.push(OToken(oToken));
+        allMarkets.push(IOToken(oToken));
     }
 
+
     function _initializeMarket(address oToken) internal {
-        uint32 timestamp = safe32(getTimestamp(), "timestamp exceeds 32 bits");
+        uint32 timestamp = safe32(getTimestamp());
 
         MarketState storage supplyState = supplyState[oToken];
         MarketState storage borrowState = borrowState[oToken];
@@ -1323,12 +1304,12 @@ contract Comptroller is
      * @param newBorrowCaps The new borrow cap values in underlying to be set. A value of 0 corresponds to unlimited borrowing.
      */
     function _setMarketBorrowCaps(
-        OToken[] calldata oTokens,
+        IOToken[] calldata oTokens,
         uint256[] calldata newBorrowCaps
     ) external {
         require(
             msg.sender == admin || msg.sender == borrowCapGuardian,
-            "only admin or borrow cap guardian can set borrow caps"
+            "only admin or borrowCapGuardian"
         );
 
         uint256 numMarkets = oTokens.length;
@@ -1353,8 +1334,6 @@ contract Comptroller is
         external
         onlyAdmin
     {
-        // require(msg.sender == admin, "only admin can set borrow cap guardian"); //todo: remove
-
         // Save current value for inclusion in log
         address oldBorrowCapGuardian = borrowCapGuardian;
 
@@ -1401,35 +1380,36 @@ contract Comptroller is
         );
     }
 
-    function _setMintPaused(OToken oToken, bool state) public returns (bool) {
+
+    function _setMintPaused(IOToken oToken, bool state) public returns (bool) {
         require(
             markets[address(oToken)].isListed,
-            "cannot pause a market that is not listed"
+            "cannot pause: market not listed"
         );
         onlyAdminOrGuardian();
-        require(msg.sender == admin || state == true, "only admin can unpause");
+        require(msg.sender == admin || state, "only admin can unpause");
 
-        mintGuardianPaused[address(oToken)] = state;
+        guardianPaused[address(oToken)].mint = state;
         emit ActionPaused(oToken, "Mint", state);
         return state;
     }
 
-    function _setBorrowPaused(OToken oToken, bool state) public returns (bool) {
+    function _setBorrowPaused(IOToken oToken, bool state) public returns (bool) {
         require(
             markets[address(oToken)].isListed,
-            "cannot pause a market that is not listed"
+            "cannot pause: market not listed"
         );
         onlyAdminOrGuardian();
-        require(msg.sender == admin || state == true, "only admin can unpause");
+        require(msg.sender == admin || state, "only admin can unpause");
 
-        borrowGuardianPaused[address(oToken)] = state;
+        guardianPaused[address(oToken)].borrow = state;
         emit ActionPaused(oToken, "Borrow", state);
         return state;
     }
 
     function _setTransferPaused(bool state) public returns (bool) {
         onlyAdminOrGuardian();
-        require(msg.sender == admin || state == true, "only admin can unpause");
+        require(msg.sender == admin || state, "only admin can unpause");
 
         transferGuardianPaused = state;
         emit ActionPaused("Transfer", state);
@@ -1438,7 +1418,7 @@ contract Comptroller is
 
     function _setSeizePaused(bool state) public returns (bool) {
         onlyAdminOrGuardian();
-        require(msg.sender == admin || state == true, "only admin can unpause");
+        require(msg.sender == admin || state, "only admin can unpause");
 
         seizeGuardianPaused = state;
         emit ActionPaused("Seize", state);
@@ -1448,7 +1428,7 @@ contract Comptroller is
     function _become(IUnitroller unitroller) public {
         require(
             msg.sender == unitroller.admin(),
-            "only unitroller admin can change brains"
+            "only unitroller admin can _become"
         );
         require(
             unitroller._acceptImplementation() == 0,
@@ -1460,11 +1440,11 @@ contract Comptroller is
     function fixBadAccruals(
         address[] calldata affectedUsers,
         uint256[] calldata amounts
-    ) external {
-        require(msg.sender == admin, "Only admin can call this function"); // Only the timelock can call this function
+    ) external onlyAdmin {
+        // require(msg.sender == admin, "only admin can call this function"); // Only the timelock can call this function TODO clean up
         require(
             !proposal65FixExecuted,
-            "Already executed this one-off function"
+            "Already executed this function"
         ); // Require that this function is only called once
         require(affectedUsers.length == amounts.length, "Invalid input");
 
@@ -1488,7 +1468,7 @@ contract Comptroller is
                 uint256 accountReceivable = amountToSubtract - currentAccrual; // Underflow safe since amountToSubtract > currentAccrual
 
                 uint256 oldReceivable = rewardReceivable[user];
-                uint256 newReceivable = add_(oldReceivable, accountReceivable);
+                uint256 newReceivable = oldReceivable + accountReceivable;
 
                 // Accounting: record the Reward debt for the user
                 rewardReceivable[user] = newReceivable;
@@ -1505,10 +1485,7 @@ contract Comptroller is
             if (amountToSubtract > 0) {
                 // Subtract the bad accrual amount from what they have accrued.
                 // Users will keep whatever they have correctly accrued.
-                rewardAccrued[user] = newAccrual = sub_(
-                    currentAccrual,
-                    amountToSubtract
-                );
+                rewardAccrued[user] = newAccrual = currentAccrual - amountToSubtract;
 
                 emit RewardAccruedAdjusted(user, currentAccrual, newAccrual);
             }
@@ -1533,12 +1510,11 @@ contract Comptroller is
      * @param borrowSpeed New borrow-side Reward speed for market
      */
     function setRewardSpeedInternal(
-        OToken oToken,
+        IOToken oToken,
         uint256 supplySpeed,
         uint256 borrowSpeed
     ) internal {
-        Market storage market = markets[address(oToken)];
-        require(market.isListed, "comp market is not listed");
+        require(markets[address(oToken)].isListed, "comp market is not listed");
 
         if (rewardSupplySpeeds[address(oToken)] != supplySpeed) {
             // Supply speed updated so let's update supply state to ensure that
@@ -1567,7 +1543,7 @@ contract Comptroller is
     function updateAndDistributeSupplierRewardsForToken(
         address oToken,
         address account
-    ) public {
+    ) public override {
         updateRewardSupplyIndex(oToken);
         distributeSupplierReward(oToken, account);
     }
@@ -1575,9 +1551,9 @@ contract Comptroller is
     function updateAndDistributeBorrowerRewardsForToken(
         address oToken,
         address borrower
-    ) public {
+    ) public override {
         Exp memory marketBorrowIndex = Exp({
-            mantissa: OToken(oToken).borrowIndex()
+            mantissa: IOToken(oToken).borrowIndex()
         });
         updateRewardBorrowIndex(oToken, marketBorrowIndex);
         distributeBorrowerReward(oToken, borrower, marketBorrowIndex);
@@ -1592,25 +1568,20 @@ contract Comptroller is
         MarketState storage supplyState = supplyState[oToken];
         uint256 supplySpeed = rewardSupplySpeeds[oToken];
         uint32 timestamp = safe32(
-            getTimestamp(),
-            "timestamp number exceeds 32 bits"
+            getTimestamp()
         );
-        uint256 deltaBlocks = sub_(
-            uint256(timestamp),
-            uint256(supplyState.timestamp)
-        );
-        if (deltaBlocks > 0 && supplySpeed > 0) {
-            uint256 supplyTokens = boostManager.boostedTotalSupply(oToken);
-            uint256 rewardAccrued = mul_(deltaBlocks, supplySpeed);
-            Double memory ratio = supplyTokens > 0
-                ? fraction(rewardAccrued, supplyTokens)
-                : Double({mantissa: 0});
-            supplyState.index = safe224(
-                add_(Double({mantissa: supplyState.index}), ratio).mantissa,
-                "new index exceeds 224 bits"
-            );
-            supplyState.timestamp = timestamp;
-        } else if (deltaBlocks > 0) {
+        uint256 deltaBlocks = uint256(timestamp) - uint256(supplyState.timestamp);
+        if (deltaBlocks > 0) {
+            if (supplySpeed > 0) {
+                uint256 supplyTokens = boostManager.boostedTotalSupply(oToken);
+                uint256 rewardAccrued = deltaBlocks * supplySpeed;
+                Double memory ratio = supplyTokens > 0
+                    ? fraction(rewardAccrued, supplyTokens)
+                    : Double({mantissa: 0});
+                supplyState.index = safe224(
+                    add_(Double({mantissa: supplyState.index}), ratio).mantissa
+                );
+            } 
             supplyState.timestamp = timestamp;
         }
     }
@@ -1627,28 +1598,23 @@ contract Comptroller is
         MarketState storage borrowState = borrowState[oToken];
         uint256 borrowSpeed = rewardBorrowSpeeds[oToken];
         uint32 timestamp = safe32(
-            getTimestamp(),
-            "timestamp number exceeds 32 bits"
+            getTimestamp()
         );
-        uint256 deltaBlocks = sub_(
-            uint256(timestamp),
-            uint256(borrowState.timestamp)
-        );
-        if (deltaBlocks > 0 && borrowSpeed > 0) {
-            uint256 borrowAmount = div_(
-                boostManager.boostedTotalBorrows(oToken),
-                marketBorrowIndex
-            );
-            uint256 rewardAccrued = mul_(deltaBlocks, borrowSpeed);
-            Double memory ratio = borrowAmount > 0
-                ? fraction(rewardAccrued, borrowAmount)
-                : Double({mantissa: 0});
-            borrowState.index = safe224(
-                add_(Double({mantissa: borrowState.index}), ratio).mantissa,
-                "new index exceeds 224 bits"
-            );
-            borrowState.timestamp = timestamp;
-        } else if (deltaBlocks > 0) {
+        uint256 deltaBlocks = uint256(timestamp) - uint256(borrowState.timestamp);
+        if (deltaBlocks > 0) {
+            if (borrowSpeed > 0) {
+                uint256 borrowAmount = div_(
+                    boostManager.boostedTotalBorrows(oToken),
+                    marketBorrowIndex
+                );
+                uint256 rewardAccrued = deltaBlocks * borrowSpeed;
+                Double memory ratio = borrowAmount > 0
+                    ? fraction(rewardAccrued, borrowAmount)
+                    : Double({mantissa: 0});
+                borrowState.index = safe224(
+                    add_(Double({mantissa: borrowState.index}), ratio).mantissa
+                );
+            } 
             borrowState.timestamp = timestamp;
         }
     }
@@ -1681,7 +1647,7 @@ contract Comptroller is
 
         // Calculate change in the cumulative sum of the Reward per oToken accrued
         Double memory deltaIndex = Double({
-            mantissa: sub_(supplyIndex, supplierIndex)
+            mantissa: supplyIndex - supplierIndex
         });
 
         uint256 supplierTokens = boostManager.boostedSupplyBalanceOf(
@@ -1692,11 +1658,11 @@ contract Comptroller is
         // Calculate Reward accrued: oTokenAmount * accruedPerOToken
         uint256 supplierDelta = mul_(supplierTokens, deltaIndex);
 
-        uint256 supplierAccrued = add_(rewardAccrued[supplier], supplierDelta);
+        uint256 supplierAccrued = rewardAccrued[supplier] + supplierDelta;
         rewardAccrued[supplier] = supplierAccrued;
 
         emit DistributedSupplierReward(
-            OToken(oToken),
+            IOToken(oToken),
             supplier,
             supplierDelta,
             supplyIndex
@@ -1734,7 +1700,7 @@ contract Comptroller is
 
         // Calculate change in the cumulative sum of the Reward per borrowed unit accrued
         Double memory deltaIndex = Double({
-            mantissa: sub_(borrowIndex, borrowerIndex)
+            mantissa: borrowIndex - borrowerIndex
         });
 
         uint256 borrowerAmount = div_(
@@ -1745,11 +1711,11 @@ contract Comptroller is
         // Calculate Reward accrued: oTokenAmount * accruedPerBorrowedUnit
         uint256 borrowerDelta = mul_(borrowerAmount, deltaIndex);
 
-        uint256 borrowerAccrued = add_(rewardAccrued[borrower], borrowerDelta);
+        uint256 borrowerAccrued = rewardAccrued[borrower] + borrowerDelta;
         rewardAccrued[borrower] = borrowerAccrued;
 
         emit DistributedBorrowerReward(
-            OToken(oToken),
+            IOToken(oToken),
             borrower,
             borrowerDelta,
             borrowIndex
@@ -1763,16 +1729,10 @@ contract Comptroller is
     function updateContributorRewards(address contributor) public {
         uint256 rewardSpeed = rewardContributorSpeeds[contributor];
         uint256 timestamp = getTimestamp();
-        uint256 deltaBlocks = sub_(
-            timestamp,
-            lastContributorTimestamp[contributor]
-        );
+        uint256 deltaBlocks = timestamp - lastContributorTimestamp[contributor];
         if (deltaBlocks > 0 && rewardSpeed > 0) {
-            uint256 newAccrued = mul_(deltaBlocks, rewardSpeed);
-            uint256 contributorAccrued = add_(
-                rewardAccrued[contributor],
-                newAccrued
-            );
+            uint256 newAccrued = deltaBlocks * rewardSpeed;
+            uint256 contributorAccrued = rewardAccrued[contributor] + newAccrued;
 
             rewardAccrued[contributor] = contributorAccrued;
             lastContributorTimestamp[contributor] = timestamp;
@@ -1783,9 +1743,10 @@ contract Comptroller is
      * @notice Claim all the reward accrued by holder in all markets
      * @param holder The address to claim Reward for
      */
+
     function claimReward(address holder) public returns (uint256) {
         for (uint256 i = 0; i < allMarkets.length; i++) {
-            OToken oToken = allMarkets[i];
+            IOToken oToken = allMarkets[i];
             require(markets[address(oToken)].isListed, "market must be listed");
             // Exp memory borrowIndex = Exp({mantissa: oToken.borrowIndex()});
             // updateRewardBorrowIndex(address(oToken), borrowIndex); // todo: rmeove
@@ -1798,7 +1759,7 @@ contract Comptroller is
         uint256 totalReward = rewardAccrued[holder];
         rewardAccrued[holder] = grantRewardInternal(
             holder,
-            rewardAccrued[holder]
+            totalReward
         );
         return totalReward;
     }
@@ -1808,7 +1769,7 @@ contract Comptroller is
      * @param holder The address to claim Reward for
      * @param oTokens The list of markets to claim Reward in
      */
-    function claimRewards(address holder, OToken[] memory oTokens) public {
+    function claimRewards(address holder, IOToken[] memory oTokens) public {
         // todo: undo _
         address[] memory holders = new address[](1);
         holders[0] = holder;
@@ -1824,14 +1785,14 @@ contract Comptroller is
      */
     function claimRewards(
         address[] memory holders,
-        OToken[] memory oTokens,
+        IOToken[] memory oTokens,
         bool borrowers,
         bool suppliers
     ) public {
         for (uint256 i = 0; i < oTokens.length; i++) {
-            OToken oToken = oTokens[i];
+            IOToken oToken = oTokens[i];
             require(markets[address(oToken)].isListed, "market must be listed");
-            if (borrowers == true) {
+            if (borrowers) {
                 Exp memory borrowIndex = Exp({mantissa: oToken.borrowIndex()});
                 updateRewardBorrowIndex(address(oToken), borrowIndex);
                 for (uint256 j = 0; j < holders.length; j++) {
@@ -1842,7 +1803,7 @@ contract Comptroller is
                     );
                 }
             }
-            if (suppliers == true) {
+            if (suppliers) {
                 updateRewardSupplyIndex(address(oToken));
                 for (uint256 j = 0; j < holders.length; j++) {
                     distributeSupplierReward(address(oToken), holders[j]);
@@ -1899,7 +1860,7 @@ contract Comptroller is
      * @param borrowSpeeds New borrow-side Reward speed for the corresponding market.
      */
     function _setRewardSpeeds(
-        OToken[] memory oTokens,
+        address[] memory oTokens,
         uint256[] memory supplySpeeds,
         uint256[] memory borrowSpeeds
     ) public {
@@ -1914,7 +1875,7 @@ contract Comptroller is
 
         for (uint256 i = 0; i < numTokens; ++i) {
             setRewardSpeedInternal(
-                oTokens[i],
+                IOToken(oTokens[i]),
                 supplySpeeds[i],
                 borrowSpeeds[i]
             );
@@ -1950,7 +1911,7 @@ contract Comptroller is
      * @dev The automatic getter may be used to access an individual market.
      * @return The list of market addresses
      */
-    function getAllMarkets() public view returns (OToken[] memory) {
+    function getAllMarkets() public view override returns (IOToken[] memory) {
         return allMarkets;
     }
 
@@ -1959,10 +1920,10 @@ contract Comptroller is
      * @dev All borrows in a deprecated oToken market can be immediately liquidated
      * @param oToken The market to check if deprecated
      */
-    function isDeprecated(OToken oToken) public view returns (bool) {
+    function isDeprecated(IOToken oToken) public view returns (bool) {
         return
             markets[address(oToken)].collateralFactorMantissa == 0 &&
-            borrowGuardianPaused[address(oToken)] == true &&
+            guardianPaused[address(oToken)].borrow == true &&
             oToken.reserveFactorMantissa() == 1e18;
     }
 
@@ -1992,7 +1953,7 @@ contract Comptroller is
         boostManager = IBoostManager(newBoostManager);
     }
 
-    function getBoostManager() external view returns (address) {
+    function getBoostManager() external view override returns(address) {
         return address(boostManager);
     }
 
@@ -2001,7 +1962,10 @@ contract Comptroller is
         emit RewardUpdaterModified(_rewardUpdater);
     }
 
-    function isMarket(address market) external view returns (bool) {
-        return markets[market].isListed;
+
+    /**
+     * @notice payable function needed to receive MATIC
+     */
+    receive() payable external {
     }
 }
