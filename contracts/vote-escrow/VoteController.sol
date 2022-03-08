@@ -497,7 +497,7 @@ contract VoteController {
             "Cannot vote so often"
         );
 
-        require(isVotable[_marketAddr], "Market's not votable");
+        require(isVotable[_marketAddr], "Market is not votable");
         // Prepare slopes and biases in memory
         VotedSlope memory oldSlope = voteUserSlopes[msg.sender][_marketAddr];
         uint256 oldBias;
