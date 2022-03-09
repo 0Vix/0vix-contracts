@@ -90,7 +90,6 @@ interface IOToken is IEIP20{
     function accrualBlockTimestamp() external returns(uint256);
 
     /*** User Interface ***/
-
     function balanceOfUnderlying(address owner) external returns (uint);
     function getAccountSnapshot(address account) external view returns (uint, uint, uint, uint);
     function borrowRatePerTimestamp() external view returns (uint);

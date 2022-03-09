@@ -144,4 +144,5 @@ contract ComptrollerV7Storage is ComptrollerV6Storage {
     mapping(address => uint) public rewardReceivable;
 
     IBoostManager public boostManager;
+    mapping(address => bool) public autoCollateralize;
 }

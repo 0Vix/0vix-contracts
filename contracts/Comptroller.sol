@@ -13,7 +13,6 @@ interface IOvix {
 
 interface IUnitroller {
     function admin() external view returns (address);
-
     function _acceptImplementation() external returns (uint256);
 }
 
@@ -332,17 +331,14 @@ contract Comptroller is
         // Pausing is a very serious situation - we revert to sound the alarms
         require(!guardianPaused[oToken].mint, "mint is paused");
 
-        // Shh - currently unused
-        minter;
-        mintAmount;
-
         if (!markets[oToken].isListed) {
             return uint256(Error.MARKET_NOT_LISTED);
         }
 
-        // Keep the flywheel moving
-        // updateRewardSupplyIndex(oToken);
-        // distributeSupplierReward(oToken, minter);
+        if(IOToken(oToken).balanceOf(minter) == 0 && autoCollateralize[oToken]) {
+           addToMarketInternal(IOToken(oToken), minter);
+        }
+        
         updateAndDistributeSupplierRewardsForToken(oToken, minter);
 
         return uint256(Error.NO_ERROR);
@@ -390,9 +386,6 @@ contract Comptroller is
             return allowed;
         }
 
-        // Keep the flywheel moving
-        // updateRewardSupplyIndex(oToken);
-        // distributeSupplierReward(oToken, redeemer); // todo: remove
         updateAndDistributeSupplierRewardsForToken(oToken, redeemer);
 
         return uint256(Error.NO_ERROR);
@@ -1230,7 +1223,7 @@ contract Comptroller is
      * @param oToken The address of the market (token) to list
      * @return uint 0=success, otherwise a failure. (See enum Error for details)
      */
-    function _supportMarket(IOToken oToken) external returns (uint256) {
+    function _supportMarket(IOToken oToken, bool _autoCollaterize) external returns (uint256) {
         if (msg.sender != admin) {
             return
                 fail(
@@ -1255,7 +1248,7 @@ contract Comptroller is
             isOed: false,
             collateralFactorMantissa: 0
         });
-
+        autoCollateralize[address(oToken)] = _autoCollaterize;
         _addMarketInternal(address(oToken));
         _initializeMarket(address(oToken));
 
@@ -1962,6 +1955,9 @@ contract Comptroller is
         emit RewardUpdaterModified(_rewardUpdater);
     }
 
+    function setAutoCollaterize(address market, bool flag) external onlyAdmin {
+            autoCollateralize[market] = flag;
+    }
 
     /**
      * @notice payable function needed to receive MATIC
