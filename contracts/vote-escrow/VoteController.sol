@@ -106,7 +106,7 @@ contract VoteController {
     mapping(address => mapping(uint256 => Point)) public pointsWeight;
     // marketAddr -> time -> slope
     mapping(address => mapping(uint256 => uint256)) private changesWeight;
-    // marketAddr -> last scheduled time (next week)
+    // marketAddr -> last scheduled time (next period)
     mapping(address => uint256) public timeWeight;
 
     // time -> Point
@@ -207,8 +207,8 @@ contract VoteController {
     }
 
     /**
-     * @notice Fill historic total weights week-over-week for missed checkins
-     * and return the total for the future week
+     * @notice Fill historic total weights period-over-period for missed checkins
+     * and return the total for the future period
      * @return Total weight
      */
     function _getTotal() internal returns (uint256) {
@@ -242,8 +242,8 @@ contract VoteController {
     }
 
     /**
-     * @notice Fill historic market weights week-over-week for missed checkins
-     * and return the total for the future week
+     * @notice Fill historic market weights period-over-period for missed checkins
+     * and return the total for the future period
      * @param marketAddr Address of the market
      * @return Market weight
      */
@@ -488,7 +488,7 @@ contract VoteController {
         require(lockEnd > nextTime, "Your token lock expires too soon");
         require(
             _userWeight <= HUNDRED_PERCENT,
-            "You used all your voting power"
+            "Voted with more than 100%"
         );
 
         require(
