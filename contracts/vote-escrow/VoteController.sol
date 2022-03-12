@@ -18,8 +18,14 @@ contract VoteController {
 
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    EnumerableSet.AddressSet private oddEpochActivities;
-    EnumerableSet.AddressSet private evenEpochActivities;
+    // sets for updating users' boosters on the looping epochs basis
+    // e.g a user voting during the 1st epoch affects markets' weight for the 2nd epoch,
+    //     making it not possible for any party/off-chain trigger to update boosters of this user before the 3rd epoch,
+    //     if no more voting is performed by this user after the 1st epoch or postponing an update even further otherwise
+    EnumerableSet.AddressSet private firstEpochUpdates;
+    EnumerableSet.AddressSet private secondEpochUpdates;
+    EnumerableSet.AddressSet private thirdEpochUpdates;
+
     // set of the votable markets - this contract does **not** manage other non-votable 0vix markets
     EnumerableSet.AddressSet private markets;
 
@@ -70,11 +76,12 @@ contract VoteController {
         uint256 timestamp;
     }
 
-    // to keep track of regular epoch changes and user activity lists corresponding to it
+    // to keep track of regular epoch changes and users' boooster update lists corresponding to it
     enum Epoch {
         TO_BE_SET,
-        ODD,
-        EVEN
+        FIRST,
+        SECOND,
+        THIRD
     }
     Epoch public shiftingEpoch = Epoch.TO_BE_SET;
 
@@ -569,14 +576,20 @@ contract VoteController {
             msg.sender
         );
 
-        // user has voted for the next epoch, essentially updating their booster
-        // so the protocol is not able to update it while their vote counts
-        if (shiftingEpoch == Epoch.ODD) {
-            evenEpochActivities.add(msg.sender);
-            oddEpochActivities.remove(msg.sender);
+        // the user has voted for the next epoch, essentially updating their booster
+        // so the protocol is not able to decrease it by updating during the next 2 epochs
+        if (shiftingEpoch == Epoch.FIRST) {
+            firstEpochUpdates.remove(msg.sender);
+            secondEpochUpdates.remove(msg.sender);
+            thirdEpochUpdates.add(msg.sender);
+        } else if (shiftingEpoch == Epoch.SECOND) {
+            firstEpochUpdates.add(msg.sender);
+            secondEpochUpdates.remove(msg.sender);
+            thirdEpochUpdates.remove(msg.sender);
         } else {
-            oddEpochActivities.add(msg.sender);
-            evenEpochActivities.remove(msg.sender);
+            firstEpochUpdates.remove(msg.sender);
+            secondEpochUpdates.add(msg.sender);
+            thirdEpochUpdates.remove(msg.sender);
         }
 
         emit VoteForMarket(
@@ -659,20 +672,26 @@ contract VoteController {
         }
 
         // shift the epoch so the booster of the needed users can be decreased
-        shiftingEpoch = shiftingEpoch == Epoch.EVEN
-            ? Epoch.ODD
+        shiftingEpoch = shiftingEpoch == Epoch.THIRD
+            ? Epoch.FIRST
             : Epoch(uint256(shiftingEpoch) + 1);
     }
 
     // update boosters for not active users
     function updateBoosters(uint256 userAmount) external {
-        EnumerableSet.AddressSet storage toUpdate = shiftingEpoch == Epoch.ODD
-            ? evenEpochActivities
-            : oddEpochActivities;
+        EnumerableSet.AddressSet storage toUpdate;
+        EnumerableSet.AddressSet storage scheduledUpdate;
 
-        EnumerableSet.AddressSet storage scheduledUpdate = shiftingEpoch == Epoch.ODD
-            ? oddEpochActivities
-            : evenEpochActivities;
+        if (shiftingEpoch == Epoch.FIRST) {
+            toUpdate = firstEpochUpdates;
+            scheduledUpdate = secondEpochUpdates;
+        } else if (shiftingEpoch == Epoch.SECOND) {
+            toUpdate = secondEpochUpdates;
+            scheduledUpdate = thirdEpochUpdates;
+        } else {
+            toUpdate = thirdEpochUpdates;
+            scheduledUpdate = firstEpochUpdates;
+        }
 
         if (userAmount == 0 || userAmount > toUpdate.length())
             userAmount = toUpdate.length();
@@ -697,9 +716,14 @@ contract VoteController {
     // returns the number of users which boosters could be updated this epoch
     // can be used by any party/off-chain trigger to check if updateBoosters() function should be called
     function numOfBoostersToUpdate() external view returns (uint256) {
-        EnumerableSet.AddressSet storage toUpdate = shiftingEpoch == Epoch.ODD
-            ? evenEpochActivities
-            : oddEpochActivities;
+        EnumerableSet.AddressSet storage toUpdate;
+        if (shiftingEpoch == Epoch.FIRST) {
+            toUpdate = firstEpochUpdates;
+        } else if (shiftingEpoch == Epoch.SECOND) {
+            toUpdate = secondEpochUpdates;
+        } else {
+            toUpdate = thirdEpochUpdates;
+        }
 
         return toUpdate.length();
     }
