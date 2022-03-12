@@ -642,7 +642,7 @@ contract VoteController {
         _getTotal();
     }
 
-    function updateRewards() external {
+    function updateRewards() public {
         require(
             block.timestamp >= nextTimeRewardsUpdated,
             "rewards already updated"
@@ -679,6 +679,11 @@ contract VoteController {
 
     // update boosters for not active users
     function updateBoosters(uint256 userAmount) external {
+        // in case an epoch should have been shifted already
+        if (block.timestamp >= nextTimeRewardsUpdated) {
+            updateRewards();
+        }
+
         EnumerableSet.AddressSet storage toUpdate;
         EnumerableSet.AddressSet storage scheduledUpdate;
 
