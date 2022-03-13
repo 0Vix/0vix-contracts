@@ -16,6 +16,7 @@ interface IOErc20 {
     function liquidateBorrow(address borrower, uint repayAmount, IOToken oTokenCollateral) external returns (uint);
     function sweepToken(IEIP20NonStandard token) external;
 
+    function underlying() external view returns(address);
 
     /*** Admin Functions ***/
 

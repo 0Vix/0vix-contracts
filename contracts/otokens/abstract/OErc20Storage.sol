@@ -7,5 +7,5 @@ abstract contract OErc20Storage is IOErc20 {
     /**
      * @notice Underlying asset for this OToken
      */
-    address public underlying;
+    address public override underlying;
 }

@@ -4,13 +4,14 @@ import "./otokens/interfaces/IOToken.sol";
 import "./PriceOracle.sol";
 import "./vote-escrow/interfaces/IBoostManager.sol";
 
+import "./interfaces/IComptroller.sol";
 import "./UnitrollerAdminStorage.sol";
 
-contract ComptrollerV1Storage is UnitrollerAdminStorage {
+abstract contract ComptrollerV1Storage is IComptroller, UnitrollerAdminStorage  {
     /**
      * @notice Oracle which gives the price of any given asset
      */
-    PriceOracle public oracle;
+    PriceOracle public override oracle;
 
     /**
      * @notice Multiplier used to calculate the maximum repayAmount when liquidating a borrow
@@ -37,7 +38,7 @@ contract ComptrollerV1Storage is UnitrollerAdminStorage {
 
 }
 
-contract ComptrollerV2Storage is ComptrollerV1Storage {
+abstract contract ComptrollerV2Storage is ComptrollerV1Storage {
     struct Market {
         /// @notice Whether or not this market is listed
         bool isListed;
@@ -78,7 +79,7 @@ contract ComptrollerV2Storage is ComptrollerV1Storage {
     mapping(address => PauseData) public guardianPaused;
 }
 
-contract ComptrollerV3Storage is ComptrollerV2Storage {
+abstract contract ComptrollerV3Storage is ComptrollerV2Storage {
     struct MarketState {
         /// @notice The market's last updated tokenBorrowIndex or tokenSupplyIndex
         uint224 index;
@@ -112,7 +113,7 @@ contract ComptrollerV3Storage is ComptrollerV2Storage {
     mapping(address => uint) public rewardAccrued;
 }
 
-contract ComptrollerV4Storage is ComptrollerV3Storage {
+abstract contract ComptrollerV4Storage is ComptrollerV3Storage {
     // @notice The borrowCapGuardian can set borrowCaps to any number for any market. Lowering the borrow cap could disable borrowing on the given market.
     address public borrowCapGuardian;
 
@@ -120,7 +121,7 @@ contract ComptrollerV4Storage is ComptrollerV3Storage {
     mapping(address => uint) public borrowCaps;
 }
 
-contract ComptrollerV5Storage is ComptrollerV4Storage {
+abstract contract ComptrollerV5Storage is ComptrollerV4Storage {
     /// @notice The portion of COMP that each contributor receives per second
     mapping(address => uint) public rewardContributorSpeeds;
 
@@ -128,7 +129,7 @@ contract ComptrollerV5Storage is ComptrollerV4Storage {
     mapping(address => uint) public lastContributorTimestamp;
 }
 
-contract ComptrollerV6Storage is ComptrollerV5Storage {
+abstract contract ComptrollerV6Storage is ComptrollerV5Storage {
     /// @notice The rate at which comp is distributed to the corresponding borrow market (per second)
     mapping(address => uint) public rewardBorrowSpeeds;
 
@@ -136,7 +137,7 @@ contract ComptrollerV6Storage is ComptrollerV5Storage {
     mapping(address => uint) public rewardSupplySpeeds;
 }
 
-contract ComptrollerV7Storage is ComptrollerV6Storage {
+abstract contract ComptrollerV7Storage is ComptrollerV6Storage {
     /// @notice Flag indicating whether the function to fix COMP accruals has been executed (RE: proposal 62 bug)
     bool public proposal65FixExecuted;
 

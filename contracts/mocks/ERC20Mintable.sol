@@ -10,7 +10,7 @@ contract ERC20Mintable is ERC20, Ownable {
         _mint(owner(), 10000000 * (10**decimals()));
     }
 
-    function mint(address to, uint256 amount) public onlyOwner {
+    function mint(address to, uint256 amount) public {
         _mint(to, amount);
     }
 
