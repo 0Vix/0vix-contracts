@@ -9,6 +9,7 @@ import "./interfaces/IAggregatorV2V3.sol";
 contract OvixChainlinkOracle is PriceOracle {
     using SafeMath for uint;
     address public admin;
+    string nativeSymbol;
 
     mapping(address => uint) internal prices;
     mapping(bytes32 => IAggregatorV2V3) internal feeds;
@@ -16,13 +17,14 @@ contract OvixChainlinkOracle is PriceOracle {
     event NewAdmin(address oldAdmin, address newAdmin);
     event FeedSet(address feed, string symbol);
 
-    constructor() {
+    constructor(string memory _nativeSymbol) {
         admin = msg.sender;
+        nativeSymbol = _nativeSymbol;
     }
 
     function getUnderlyingPrice(IOToken oToken) public override view returns (uint) {
         string memory symbol = oToken.symbol();
-        if (compareStrings(symbol, "oMATIC")) {
+        if (compareStrings(symbol, nativeSymbol)) {
             return getChainlinkPrice(getFeed(symbol));
         } else {
             return getPrice(oToken);

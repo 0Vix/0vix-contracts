@@ -40,5 +40,18 @@ contract TokenMock {
       totalBorrow = _amount;
     }
 
+    function symbol() external pure returns (string memory) {
+      return "TKN";
+    }
+
+    function name() external pure returns (string memory) {
+      return "TokenMock";
+    }
+
+    function decimals() external pure returns (uint8) {
+      return 18;
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {}
     
 }
