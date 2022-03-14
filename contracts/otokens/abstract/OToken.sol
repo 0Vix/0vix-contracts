@@ -327,7 +327,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @dev Function to simply retrieve block timestamp
      *  This exists mainly for inheriting test contracts to stub this result.
      */
-    function getBlockTimestamp() internal view returns (uint256) {
+    function getBlockTimestamp() internal view virtual returns (uint256) {
         return block.timestamp;
     }
 
@@ -486,6 +486,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
     function exchangeRateStoredInternal()
         internal
         view
+        virtual
         returns (MathError, uint256)
     {
         uint256 _totalSupply = totalSupply;
@@ -1775,9 +1776,6 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         // (No safe failures beyond this point)
 
         /* We write the previously calculated values into storage */
-        _updateBoostSupplyBalances(borrower, accountTokens[borrower], vars.borrowerTokensNew);
-        _updateBoostSupplyBalances(liquidator, accountTokens[liquidator], vars.liquidatorTokensNew);
-        
         totalReserves = vars.totalReservesNew;
         totalSupply = vars.totalSupplyNew;
         accountTokens[borrower] = vars.borrowerTokensNew;

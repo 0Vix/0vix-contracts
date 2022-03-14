@@ -8,7 +8,7 @@ import "../otokens/interfaces/IOToken.sol";
 
 
 contract OErc20Mock is OErc20 {
-    uint256 public blockNumber = 100000;
+    uint256 public blockTimestamp = 1647281432;
     uint256 public harnessExchangeRate;
     bool public harnessExchangeRateStored;
 
@@ -26,8 +26,8 @@ contract OErc20Mock is OErc20 {
         return super.exchangeRateStoredInternal();
     }
 
-    function getBlockNumber() internal view returns (uint) {
-        return blockNumber;
+    function getBlockTimestamp() internal view override returns (uint) {
+        return blockTimestamp;
     }
 
     function getBorrowRateMaxMantissa() public pure returns (uint) {
@@ -38,12 +38,12 @@ contract OErc20Mock is OErc20 {
         accrualBlockTimestamp = _accrualblockTimestamp;
     }
 
-    function harnessSetBlockNumber(uint newBlockNumber) public {
-        blockNumber = newBlockNumber;
+    function harnessSetBlockTimestamp(uint newBlockTimestamp) public {
+        blockTimestamp = newBlockTimestamp;
     }
 
-    function harnessFastForward(uint blocks) public {
-        blockNumber += blocks;
+    function harnessFastForward(uint sec) public {
+        blockTimestamp += sec;
     }
 
     function harnessSetBalance(address account, uint amount) external {
