@@ -224,7 +224,7 @@ contract OErc20 is OToken, OErc20Storage {
      *      Note: This wrapper safely handles non-standard ERC-20 tokens that do not return a value.
      *            See here: https://medium.com/coinmonks/missing-return-value-bug-at-least-130-tokens-affected-d67bf08521ca
      */
-    function doTransferOut(address payable to, uint256 amount) internal override {
+    function doTransferOut(address payable to, uint256 amount) internal override virtual {
         IEIP20NonStandard token = IEIP20NonStandard(underlying);
         token.transfer(to, amount);
 
