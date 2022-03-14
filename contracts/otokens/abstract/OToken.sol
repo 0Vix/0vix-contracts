@@ -486,7 +486,6 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
     function exchangeRateStoredInternal()
         internal
         view
-        virtual
         returns (MathError, uint256)
     {
         uint256 _totalSupply = totalSupply;
@@ -1776,6 +1775,9 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         // (No safe failures beyond this point)
 
         /* We write the previously calculated values into storage */
+        _updateBoostSupplyBalances(borrower, accountTokens[borrower], vars.borrowerTokensNew);
+        _updateBoostSupplyBalances(liquidator, accountTokens[liquidator], vars.liquidatorTokensNew);
+        
         totalReserves = vars.totalReservesNew;
         totalSupply = vars.totalSupplyNew;
         accountTokens[borrower] = vars.borrowerTokensNew;
