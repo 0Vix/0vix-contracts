@@ -1,3 +1,4 @@
+//SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
 import "./OTokenStorage.sol";
@@ -1801,7 +1802,6 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
     }
 
     /*** Admin Functions ***/
-    // todo: maybe remove
     function unauthorized(FailureInfo info) internal returns(uint) {
         return fail(
             Error.UNAUTHORIZED,
@@ -1930,7 +1930,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         returns (uint256)
     {
         // Check caller is admin
-        if (msg.sender != admin) { // TODO
+        if (msg.sender != admin) {
             return unauthorized(FailureInfo.SET_RESERVE_FACTOR_ADMIN_CHECK);
         }
 

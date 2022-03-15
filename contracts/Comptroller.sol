@@ -1,3 +1,4 @@
+//SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
 import "./libraries/ErrorReporter.sol";
@@ -334,6 +335,7 @@ contract Comptroller is
         uint256 mintAmount
     ) external override returns (uint256) {
         // Pausing is a very serious situation - we revert to sound the alarms
+        mintAmount; // not used yet
         require(!guardianPaused[oToken].mint, "mint is paused");
 
         if (!markets[oToken].isListed) {
@@ -443,7 +445,7 @@ contract Comptroller is
         address redeemer,
         uint256 redeemAmount,
         uint256 redeemTokens
-    ) external override {
+    ) external pure override {
         // Shh - currently unused
         oToken;
         redeemer;
@@ -466,7 +468,6 @@ contract Comptroller is
     ) external override returns (uint256) {
         // Pausing is a very serious situation - we revert to sound the alarms
         require(!guardianPaused[oToken].borrow, "borrow is paused");
-
         if (!markets[oToken].isListed) {
             return uint256(Error.MARKET_NOT_LISTED);
         }
@@ -517,10 +518,6 @@ contract Comptroller is
         }
 
         // Keep the flywheel moving
-        // Exp memory borrowIndex = Exp({mantissa: IOToken(oToken).borrowIndex()});
-        // updateRewardBorrowIndex(oToken, borrowIndex); //todo: remove
-        // distributeBorrowerReward(oToken, borrower, borrowIndex);
-
         updateAndDistributeBorrowerRewardsForToken(oToken, borrower);
 
         return uint256(Error.NO_ERROR);
@@ -572,10 +569,6 @@ contract Comptroller is
         }
 
         // Keep the flywheel moving
-        // Exp memory borrowIndex = Exp({mantissa: IOToken(oToken).borrowIndex()});
-        // updateRewardBorrowIndex(oToken, borrowIndex); //todo: rmeove
-        // distributeBorrowerReward(oToken, borrower, borrowIndex);
-
         updateAndDistributeBorrowerRewardsForToken(oToken, borrower);
 
         return uint256(Error.NO_ERROR);
@@ -622,7 +615,7 @@ contract Comptroller is
         address liquidator,
         address borrower,
         uint256 repayAmount
-    ) external override returns (uint256) {
+    ) external view override returns (uint256) {
         // Shh - currently unused
         liquidator;
 
@@ -804,9 +797,6 @@ contract Comptroller is
         // Keep the flywheel moving
         updateAndDistributeSupplierRewardsForToken(oToken, src);
         updateAndDistributeSupplierRewardsForToken(oToken, dst);
-        // updateRewardSupplyIndex(oToken);
-        // distributeSupplierReward(oToken, src); //todo: remove
-        // distributeSupplierReward(oToken, dst);
 
         return uint256(Error.NO_ERROR);
     }
@@ -1097,7 +1087,6 @@ contract Comptroller is
         // Check caller is admin
         if (msg.sender != admin) {
             return
-                // TODO can be optimized
                 fail(
                     Error.UNAUTHORIZED,
                     FailureInfo.SET_PRICE_ORACLE_OWNER_CHECK
@@ -1127,9 +1116,6 @@ contract Comptroller is
         onlyAdmin
         returns (uint256)
     {
-        // Check caller is admin
-        //  require(msg.sender == admin, "only admin can set close factor"); // todo remove
-
         uint256 oldCloseFactorMantissa = closeFactorMantissa;
         closeFactorMantissa = newCloseFactorMantissa;
         emit NewCloseFactor(oldCloseFactorMantissa, closeFactorMantissa);
@@ -1765,12 +1751,7 @@ contract Comptroller is
         for (uint256 i = 0; i < allMarkets.length; i++) {
             IOToken oToken = allMarkets[i];
             require(markets[address(oToken)].isListed, "market must be listed");
-            // Exp memory borrowIndex = Exp({mantissa: oToken.borrowIndex()});
-            // updateRewardBorrowIndex(address(oToken), borrowIndex); // todo: rmeove
-            // distributeBorrowerReward(address(oToken), holder, borrowIndex);
             updateAndDistributeBorrowerRewardsForToken(address(oToken), holder);
-            // updateRewardSupplyIndex(address(oToken));
-            // distributeSupplierReward(address(oToken), holder);
             updateAndDistributeSupplierRewardsForToken(address(oToken), holder);
         }
         uint256 totalReward = rewardAccrued[holder];
