@@ -1742,6 +1742,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
             seizeTokens,
             Exp({mantissa: protocolSeizeShareMantissa})
         );
+        
         vars.liquidatorSeizeTokens = seizeTokens - vars.protocolSeizeTokens;
 
         (
