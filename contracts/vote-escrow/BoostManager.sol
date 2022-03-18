@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../otokens/interfaces/IOToken.sol";
 import "../interfaces/IComptroller.sol";
 
-
 contract BoostManager is Ownable {
     bool public init = true; //todo set to true when using proxy
     uint256 private constant MULTIPLIER = 10**18;
@@ -27,7 +26,11 @@ contract BoostManager is Ownable {
 
     constructor() {}
 
-    function initialize(IERC20 ve, IComptroller _comptroller, address _owner) external {
+    function initialize(
+        IERC20 ve,
+        IComptroller _comptroller,
+        address _owner
+    ) external {
         require(!init, "contract already initialized");
         init = true;
         veOVIX = ve;
@@ -45,7 +48,7 @@ contract BoostManager is Ownable {
 
     /**
      * @notice Updates the boost basis of the user with the latest veBalance
-     * @param user Address of the user which booster needs to be updated 
+     * @param user Address of the user which booster needs to be updated
      * @return The boolean value indicating whether the user still has the booster greater than 1.0
      */
     function updateBoostBasis(address user)
@@ -154,7 +157,6 @@ contract BoostManager is Ownable {
         uint256 newBoostBasis,
         uint256 marketType
     ) internal {
-        // todo: add min/max
         uint256 deltaOldBalance = calcBoostedBalance(
             user,
             oldBoostBasis,
@@ -206,9 +208,10 @@ contract BoostManager is Ownable {
         uint256 boosterBasis,
         uint256 balance
     ) internal view returns (uint256) {
-        if (boosterBasis == 0) return balance;
+        if (veBalances[user] == 0 || boosterBasis == 0) return balance;
 
         uint256 minVe = (boosterBasis * balance) / MULTIPLIER;
+
         uint256 booster;
 
         if (veBalances[user] >= minVe) {
@@ -219,7 +222,6 @@ contract BoostManager is Ownable {
                 10 *
                 MULTIPLIER; // 1.5 * veBalance / minVe + 1;
         }
-
         return ((balance * booster) / (10 * MULTIPLIER));
     }
 
