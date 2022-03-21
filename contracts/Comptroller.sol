@@ -342,7 +342,7 @@ contract Comptroller is
             return uint256(Error.MARKET_NOT_LISTED);
         }
 
-        if(IOToken(oToken).balanceOf(minter) == 0 && autoCollateralize[oToken]) {
+        if(IOToken(oToken).balanceOf(minter) == 0 && markets[oToken].autoCollaterize) {
            addToMarketInternal(IOToken(oToken), minter);
         }
         
@@ -1256,23 +1256,16 @@ contract Comptroller is
         // Note that isOed is not in active use anymore
         markets[address(oToken)] = Market({
             isListed: true,
-            isOed: false,
+            autoCollaterize: _autoCollaterize,
             collateralFactorMantissa: 0
         });
-        autoCollateralize[address(oToken)] = _autoCollaterize;
-        _addMarketInternal(address(oToken));
+
+        allMarkets.push(oToken);
         _initializeMarket(address(oToken));
 
         emit MarketListed(oToken);
 
         return uint256(Error.NO_ERROR);
-    }
-
-    function _addMarketInternal(address oToken) internal {
-        for (uint256 i = 0; i < allMarkets.length; i++) {
-            require(allMarkets[i] != IOToken(oToken), "market already added");
-        }
-        allMarkets.push(IOToken(oToken));
     }
 
     function _initializeMarket(address oToken) internal {
@@ -1439,63 +1432,6 @@ contract Comptroller is
             unitroller._acceptImplementation() == 0,
             "change not authorized"
         );
-    }
-
-    /// @notice Delete this function after proposal 65 is executed
-    function fixBadAccruals(
-        address[] calldata affectedUsers,
-        uint256[] calldata amounts
-    ) external onlyAdmin {
-        // require(msg.sender == admin, "only admin can call this function"); // Only the timelock can call this function TODO clean up
-        require(!proposal65FixExecuted, "Already executed this function"); // Require that this function is only called once
-        require(affectedUsers.length == amounts.length, "Invalid input");
-
-        // Loop variables
-        address user;
-        uint256 currentAccrual;
-        uint256 amountToSubtract;
-        uint256 newAccrual;
-
-        // Iterate through all affected users
-        for (uint256 i = 0; i < affectedUsers.length; ++i) {
-            user = affectedUsers[i];
-            currentAccrual = rewardAccrued[user];
-
-            amountToSubtract = amounts[i];
-
-            // The case where the user has claimed and received an incorrect amount of COMP.
-            // The user has less currently accrued than the amount they incorrectly received.
-            if (amountToSubtract > currentAccrual) {
-                // Amount of Reward the user owes the protocol
-                uint256 accountReceivable = amountToSubtract - currentAccrual; // Underflow safe since amountToSubtract > currentAccrual
-
-                uint256 oldReceivable = rewardReceivable[user];
-                uint256 newReceivable = oldReceivable + accountReceivable;
-
-                // Accounting: record the Reward debt for the user
-                rewardReceivable[user] = newReceivable;
-
-                emit RewardReceivableUpdated(
-                    user,
-                    oldReceivable,
-                    newReceivable
-                );
-
-                amountToSubtract = currentAccrual;
-            }
-
-            if (amountToSubtract > 0) {
-                // Subtract the bad accrual amount from what they have accrued.
-                // Users will keep whatever they have correctly accrued.
-                rewardAccrued[user] = newAccrual =
-                    currentAccrual -
-                    amountToSubtract;
-
-                emit RewardAccruedAdjusted(user, currentAccrual, newAccrual);
-            }
-        }
-
-        proposal65FixExecuted = true; // Makes it so that this function cannot be called again
     }
 
     /**
@@ -1964,7 +1900,7 @@ contract Comptroller is
     }
 
     function setAutoCollaterize(address market, bool flag) external onlyAdmin {
-            autoCollateralize[market] = flag;
+           markets[market].autoCollaterize = flag;
     }
 
     /**

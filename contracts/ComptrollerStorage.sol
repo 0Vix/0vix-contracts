@@ -44,8 +44,7 @@ abstract contract ComptrollerV2Storage is ComptrollerV1Storage {
         /// @notice Whether or not this market is listed
         bool isListed;
 
-        /// @notice Whether or not this market receives COMP
-        bool isOed;
+        bool autoCollaterize;
         /**
          * @notice Multiplier representing the most one can borrow against their collateral in this market.
          *  For instance, 0.9 to allow borrowing 90% of collateral value.
@@ -139,12 +138,8 @@ abstract contract ComptrollerV6Storage is ComptrollerV5Storage {
 }
 
 abstract contract ComptrollerV7Storage is ComptrollerV6Storage {
-    /// @notice Flag indicating whether the function to fix COMP accruals has been executed (RE: proposal 62 bug)
-    bool public proposal65FixExecuted;
-
     /// @notice Accounting storage mapping account addresses to how much COMP they owe the protocol.
     mapping(address => uint) public rewardReceivable;
 
     IBoostManager public boostManager;
-    mapping(address => bool) public autoCollateralize;
 }
