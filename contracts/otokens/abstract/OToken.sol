@@ -1061,14 +1061,6 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         // EFFECTS & INTERACTIONS
         // (No safe failures beyond this point)
 
-        /*
-         * We invoke doTransferOut for the redeemer and the redeemAmount.
-         *  Note: The oToken must handle variations between ERC-20 and MATIC underlying.
-         *  On success, the oToken has redeemAmount less of cash.
-         *  doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
-         */
-        doTransferOut(redeemer, vars.redeemAmount);
-
         _updateBoostSupplyBalances(
             redeemer,
             accountTokens[redeemer],
@@ -1089,6 +1081,15 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
             vars.redeemAmount,
             vars.redeemTokens
         );
+
+                /*
+         * We invoke doTransferOut for the redeemer and the redeemAmount.
+         *  Note: The oToken must handle variations between ERC-20 and MATIC underlying.
+         *  On success, the oToken has redeemAmount less of cash.
+         *  doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
+         */
+        doTransferOut(redeemer, vars.redeemAmount);
+
 
         return uint256(Error.NO_ERROR);
     }
@@ -1211,14 +1212,6 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         // EFFECTS & INTERACTIONS
         // (No safe failures beyond this point)
 
-        /*
-         * We invoke doTransferOut for the borrower and the borrowAmount.
-         *  Note: The oToken must handle variations between ERC-20 and MATIC underlying.
-         *  On success, the oToken borrowAmount less of cash.
-         *  doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
-         */
-        doTransferOut(borrower, borrowAmount);
-
         /* We write the previously calculated values into storage */
         accountBorrows[borrower].principal = accountBorrowsNew;
         accountBorrows[borrower].interestIndex = borrowIndex;
@@ -1241,6 +1234,14 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         /* We call the defense hook */
         // unused function
         // comptroller.borrowVerify(address(this), borrower, borrowAmount);
+
+         /*
+         * We invoke doTransferOut for the borrower and the borrowAmount.
+         *  Note: The oToken must handle variations between ERC-20 and MATIC underlying.
+         *  On success, the oToken borrowAmount less of cash.
+         *  doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
+         */
+        doTransferOut(borrower, borrowAmount);
 
         return uint256(Error.NO_ERROR);
     }
