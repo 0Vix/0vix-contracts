@@ -107,10 +107,22 @@ contract BoostManager is Ownable {
 
     function _updateSupplyBoostBasis(address market, address user) internal {
         supplyBoosterBasis[market][user] = calcBoostBasis(market, 0);
+        emit BoostBasisUpdated(
+            user,
+            market,
+            supplyBoosterBasis[market][user],
+            0
+        );
     }
 
     function _updateBorrowBoostBasis(address market, address user) internal {
         borrowBoosterBasis[market][user] = calcBoostBasis(market, 1);
+        emit BoostBasisUpdated(
+            user,
+            market,
+            borrowBoosterBasis[market][user],
+            1
+        );
     }
 
     // call from oToken
@@ -172,11 +184,27 @@ contract BoostManager is Ownable {
                 deltaTotalSupply[market] +
                 deltaNewBalance -
                 deltaOldBalance;
+            emit BoostedBalanceUpdated(
+                user,
+                market,
+                deltaOldBalance,
+                deltaNewBalance,
+                deltaTotalSupply[market],
+                marketType
+            );
         } else {
             deltaTotalBorrows[market] =
                 deltaTotalBorrows[market] +
                 deltaNewBalance -
                 deltaOldBalance;
+            emit BoostedBalanceUpdated(
+                user,
+                market,
+                deltaOldBalance,
+                deltaNewBalance,
+                deltaTotalBorrows[market],
+                marketType
+            );
         }
     }
 
@@ -271,6 +299,7 @@ contract BoostManager is Ownable {
 
     function setAuthorized(address addr, bool flag) external onlyOwner {
         authorized[addr] = flag;
+        emit AuthorizedUpdated(addr, flag);
     }
 
     function isAuthorized(address addr) external view returns (bool) {
@@ -279,5 +308,25 @@ contract BoostManager is Ownable {
 
     function setVeOVIX(IERC20 ve) external onlyOwner {
         veOVIX = ve;
+        emit VeOVIXUpdated(veOVIX);
     }
+
+    event BoostBasisUpdated(
+        address indexed user,
+        address indexed market,
+        uint256 boostBasis,
+        uint256 marketType
+    );
+
+    event BoostedBalanceUpdated(
+        address indexed user,
+        address indexed market,
+        uint256 deltaOldBalance,
+        uint256 deltaNewBalance,
+        uint256 deltaTotal,
+        uint256 marketType
+    );
+
+    event AuthorizedUpdated(address indexed addr, bool flag);
+    event VeOVIXUpdated(IERC20 ve);
 }
