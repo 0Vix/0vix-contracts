@@ -154,6 +154,12 @@ contract VoteController {
         uint256 newWeight
     );
 
+    event RewardUpdated(
+        address market,
+        uint256 time,
+        uint256 reward
+    );
+
     modifier onlyAdmin() {
         require(msg.sender == admin, "admin only");
         _;
@@ -669,6 +675,7 @@ contract VoteController {
 
             comp._setRewardSpeeds(addrs, rewards, rewards);
             updates.push(Updated(addr, reward, block.timestamp));
+            emit RewardUpdated(addr, reward, block.timestamp);
         }
 
         // shift the epoch so the booster of the needed users can be decreased

@@ -32,7 +32,7 @@ contract OvixChainlinkOracle is PriceOracle {
         }
     }
 
-    function getPrice(IOToken oToken) public view returns (uint price) {
+    function getPrice(IOToken oToken) internal view returns (uint price) {
         IEIP20 token = IEIP20(OErc20(address(oToken)).underlying());
 
         if (prices[address(token)] != 0) {
@@ -50,7 +50,7 @@ contract OvixChainlinkOracle is PriceOracle {
         }
     }
 
-    function getChainlinkPrice(IAggregatorV2V3 feed) public view returns (uint) {
+    function getChainlinkPrice(IAggregatorV2V3 feed) internal view returns (uint) {
         // Chainlink USD-denominated feeds store answers at 8 decimals
         uint decimalDelta = uint(18).sub(feed.decimals());
         // Ensure that we don't multiply the result by 0
