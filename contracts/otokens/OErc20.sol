@@ -145,8 +145,11 @@ contract OErc20 is OToken, OErc20Storage {
             address(token) != underlying,
             "OErc20::sweepToken: can not sweep underlying token"
         );
+        uint256 underlyingBalanceBefore = IEIP20(underlying).balanceOf(address(this));
         uint256 balance = token.balanceOf(address(this));
         token.transfer(admin, balance);
+
+        require(underlyingBalanceBefore == IEIP20(underlying).balanceOf(address(this)), "underlying balance changed");
     }
 
     /**
