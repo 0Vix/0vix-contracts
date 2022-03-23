@@ -33,6 +33,16 @@ contract ERC20Mintable is ERC20, Ownable {
         failTransferToAddresses[dst] = _fail;
     }
 
+    function harnessSetBalance(address who, uint256 amount) public {
+        uint256 oldBalance = balanceOf(who);
+
+        if (oldBalance > amount) {
+            _burn(who, oldBalance - amount);
+        } else {
+            _mint(who, amount - oldBalance);
+        }
+    }
+
     function transfer(address dst, uint256 amount) public override returns (bool success) {
         // Added for testing purposes
         if (failTransferToAddresses[dst]) {
