@@ -14,6 +14,7 @@ interface IOvix {
 
 interface IUnitroller {
     function admin() external view returns (address);
+
     function _acceptImplementation() external returns (uint256);
 }
 
@@ -31,9 +32,6 @@ contract Comptroller is
 
     /// @notice Emitted when an admin supports a market
     event MarketListed(IOToken oToken);
-
-    /// @notice Emitted when market autoCollaterize flag is set
-    event MarketAutoCollateralized(bool isAutoCollateralized);
 
     /// @notice Emitted when an account enters a market
     event MarketEntered(IOToken oToken, address account);
@@ -115,8 +113,19 @@ contract Comptroller is
     /// @notice Emitted when VIX is granted by admin
     event VixGranted(address recipient, uint256 amount);
 
-    /// @notice Emitted when VIX rewards are being claimed for a user
-    event VixClaimed(address recipient, uint256 amount);
+    /// @notice Emitted when Reward accrued for a user has been manually adjusted.
+    event RewardAccruedAdjusted(
+        address indexed user,
+        uint256 oldRewardAccrued,
+        uint256 newRewardAccrued
+    );
+
+    /// @notice Emitted when Reward receivable for a user has been updated.
+    event RewardReceivableUpdated(
+        address indexed user,
+        uint256 oldRewardReceivable,
+        uint256 newRewardReceivable
+    );
 
     bool public constant override isComptroller = true;
 
@@ -334,10 +343,13 @@ contract Comptroller is
             return uint256(Error.MARKET_NOT_LISTED);
         }
 
-        if(IOToken(oToken).balanceOf(minter) == 0 && markets[oToken].autoCollaterize) {
-           addToMarketInternal(IOToken(oToken), minter);
+        if (
+            IOToken(oToken).balanceOf(minter) == 0 &&
+            markets[oToken].autoCollaterize
+        ) {
+            addToMarketInternal(IOToken(oToken), minter);
         }
-        
+
         updateAndDistributeSupplierRewardsForToken(oToken, minter);
 
         return uint256(Error.NO_ERROR);
@@ -1226,7 +1238,10 @@ contract Comptroller is
      * @param _autoCollaterize Boolean value representing whether the market should have auto-collateralisation enabled
      * @return uint 0=success, otherwise a failure. (See enum Error for details)
      */
-    function _supportMarket(IOToken oToken, bool _autoCollaterize) external returns (uint256) {
+    function _supportMarket(IOToken oToken, bool _autoCollaterize)
+        external
+        returns (uint256)
+    {
         if (msg.sender != admin) {
             return
                 fail(
@@ -1245,13 +1260,12 @@ contract Comptroller is
 
         oToken.isOToken(); // Sanity check to make sure its really a IOToken
 
+        // Note that isOed is not in active use anymore
         markets[address(oToken)] = Market({
             isListed: true,
             autoCollaterize: _autoCollaterize,
             collateralFactorMantissa: 0
         });
-
-        emit MarketAutoCollateralized(_autoCollaterize);
 
         allMarkets.push(oToken);
         _initializeMarket(address(oToken));
@@ -1505,7 +1519,7 @@ contract Comptroller is
             uint256(supplyState.timestamp);
         if (deltaBlocks > 0) {
             if (supplySpeed > 0) {
-                uint256 supplyTokens = boostManager.boostedTotalSupply(oToken);
+                uint256 supplyTokens = address(boostManager) == address(0) ? IOToken(oToken).totalSupply() : boostManager.boostedTotalSupply(oToken);
                 uint256 rewardAccrued = deltaBlocks * supplySpeed;
                 Double memory ratio = supplyTokens > 0
                     ? fraction(rewardAccrued, supplyTokens)
@@ -1535,7 +1549,7 @@ contract Comptroller is
         if (deltaBlocks > 0) {
             if (borrowSpeed > 0) {
                 uint256 borrowAmount = div_(
-                    boostManager.boostedTotalBorrows(oToken),
+                     address(boostManager) == address(0) ? IOToken(oToken).totalBorrows() : boostManager.boostedTotalBorrows(oToken),
                     marketBorrowIndex
                 );
                 uint256 rewardAccrued = deltaBlocks * borrowSpeed;
@@ -1551,7 +1565,7 @@ contract Comptroller is
     }
 
     /**
-     * @notice Calculate Reward accrued by a supplier
+     * @notice Calculate Reward accrued by a supplier and possibly transfer it to them
      * @param oToken The market in which the supplier is interacting
      * @param supplier The address of the supplier to distribute Reward to
      */
@@ -1581,7 +1595,7 @@ contract Comptroller is
             mantissa: supplyIndex - supplierIndex
         });
 
-        uint256 supplierTokens = boostManager.boostedSupplyBalanceOf(
+        uint256 supplierTokens = address(boostManager) == address(0) ? IOToken(oToken).balanceOf(supplier) : boostManager.boostedSupplyBalanceOf(
             oToken,
             supplier
         );
@@ -1601,7 +1615,7 @@ contract Comptroller is
     }
 
     /**
-     * @notice Calculate Reward accrued by a borrower
+     * @notice Calculate Reward accrued by a borrower and possibly transfer it to them
      * @dev Borrowers will not begin to accrue until after the first interaction with the protocol.
      * @param oToken The market in which the borrower is interacting
      * @param borrower The address of the borrower to distribute Reward to
@@ -1635,7 +1649,7 @@ contract Comptroller is
         });
 
         uint256 borrowerAmount = div_(
-            boostManager.boostedBorrowBalanceOf(oToken, borrower),
+             address(boostManager) == address(0) ? IOToken(oToken).borrowBalanceStored(borrower) : boostManager.boostedBorrowBalanceOf(oToken, borrower),
             marketBorrowIndex
         );
 
@@ -1754,12 +1768,14 @@ contract Comptroller is
         returns (uint256)
     {
         IOvix vix = IOvix(getVixAddress());
-        uint256 rewardRemaining = vix.balanceOf(address(this));
-        if (amount > 0 && amount <= rewardRemaining) {
-            vix.transfer(user, amount);
-            emit VixClaimed(user, amount);
-            return 0;
+        if (address(vix) != address(0)) {
+            uint256 rewardRemaining = vix.balanceOf(address(this));
+            if (amount > 0 && amount <= rewardRemaining) {
+                vix.transfer(user, amount);
+                return 0;
+            }
         }
+
         return amount;
     }
 
@@ -1894,8 +1910,7 @@ contract Comptroller is
     }
 
     function setAutoCollaterize(address market, bool flag) external onlyAdmin {
-           markets[market].autoCollaterize = flag;
-           emit MarketAutoCollateralized(flag);
+        markets[market].autoCollaterize = flag;
     }
 
     /**
