@@ -1082,7 +1082,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
             vars.redeemTokens
         );
 
-                /*
+        /*
          * We invoke doTransferOut for the redeemer and the redeemAmount.
          *  Note: The oToken must handle variations between ERC-20 and MATIC underlying.
          *  On success, the oToken has redeemAmount less of cash.
