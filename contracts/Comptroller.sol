@@ -33,6 +33,9 @@ contract Comptroller is
     /// @notice Emitted when an admin supports a market
     event MarketListed(IOToken oToken);
 
+    /// @notice Emitted when market autoCollaterize flag is set
+    event MarketAutoCollateralized(bool isAutoCollateralized);
+
     /// @notice Emitted when an account enters a market
     event MarketEntered(IOToken oToken, address account);
 
@@ -113,19 +116,8 @@ contract Comptroller is
     /// @notice Emitted when VIX is granted by admin
     event VixGranted(address recipient, uint256 amount);
 
-    /// @notice Emitted when Reward accrued for a user has been manually adjusted.
-    event RewardAccruedAdjusted(
-        address indexed user,
-        uint256 oldRewardAccrued,
-        uint256 newRewardAccrued
-    );
-
-    /// @notice Emitted when Reward receivable for a user has been updated.
-    event RewardReceivableUpdated(
-        address indexed user,
-        uint256 oldRewardReceivable,
-        uint256 newRewardReceivable
-    );
+    /// @notice Emitted when VIX rewards are being claimed for a user
+    event VixClaimed(address recipient, uint256 amount);
 
     bool public constant override isComptroller = true;
 
@@ -1260,12 +1252,13 @@ contract Comptroller is
 
         oToken.isOToken(); // Sanity check to make sure its really a IOToken
 
-        // Note that isOed is not in active use anymore
         markets[address(oToken)] = Market({
             isListed: true,
             autoCollaterize: _autoCollaterize,
             collateralFactorMantissa: 0
         });
+
+        emit MarketAutoCollateralized(_autoCollaterize);
 
         allMarkets.push(oToken);
         _initializeMarket(address(oToken));
@@ -1565,7 +1558,7 @@ contract Comptroller is
     }
 
     /**
-     * @notice Calculate Reward accrued by a supplier and possibly transfer it to them
+     * @notice Calculate Reward accrued by a supplier
      * @param oToken The market in which the supplier is interacting
      * @param supplier The address of the supplier to distribute Reward to
      */
@@ -1615,7 +1608,7 @@ contract Comptroller is
     }
 
     /**
-     * @notice Calculate Reward accrued by a borrower and possibly transfer it to them
+     * @notice Calculate Reward accrued by a borrower
      * @dev Borrowers will not begin to accrue until after the first interaction with the protocol.
      * @param oToken The market in which the borrower is interacting
      * @param borrower The address of the borrower to distribute Reward to
@@ -1910,7 +1903,8 @@ contract Comptroller is
     }
 
     function setAutoCollaterize(address market, bool flag) external onlyAdmin {
-        markets[market].autoCollaterize = flag;
+           markets[market].autoCollaterize = flag;
+           emit MarketAutoCollateralized(flag);
     }
 
     /**
