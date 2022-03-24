@@ -127,13 +127,11 @@ contract VoteController {
 
     event NewMarketWeight(
         address marketAddress,
-        uint256 time,
         uint256 weight,
         uint256 totalWeight
     );
 
     event VoteForMarket(
-        uint256 time,
         address user,
         address marketAddr,
         uint256 weight
@@ -148,16 +146,32 @@ contract VoteController {
     );
     event TotalEmissionsChanged(uint256 oldAmount, uint256 newAmount);
 
+    /// @param market market address
+    /// @param oldWeight normalized to 10^4
+    /// @param newWeight normalized to 10^4
     event FixedWeightChanged(
         address market,
         uint256 oldWeight,
         uint256 newWeight
     );
 
-    event RewardUpdated(
+    /// @notice this event logs reward speed set to Comptroller and _relative_ fixed & community weights for the market
+    /// @param market market address
+    /// @param supplyReward comptroller supply rewards speed
+    /// @param borrowReward comptroller supply rewards speed
+    /// @param fixedWeight normalized to 10^4
+    /// @param communityWeight normalized to 10^18
+    event RewardsUpdated(
         address market,
-        uint256 time,
-        uint256 reward
+        uint256 supplyReward,
+        uint256 borrowReward,
+        uint256 fixedWeight,
+        uint256 communityWeight
+    );
+
+    /// @notice this event logs the amount of users whose boosters were updated due to their inactivity
+    event BoostersUpdated(
+        uint256 usersUpdated
     );
 
     modifier onlyAdmin() {
@@ -448,7 +462,7 @@ contract VoteController {
         pointsTotal[nextTime].bias = _totalWeight;
         timeTotal = nextTime;
 
-        emit NewMarketWeight(addr, block.timestamp, weight, _totalWeight);
+        emit NewMarketWeight(addr, weight, _totalWeight);
     }
 
     /**
@@ -599,7 +613,6 @@ contract VoteController {
         }
 
         emit VoteForMarket(
-            block.timestamp,
             msg.sender,
             _marketAddr,
             _userWeight
@@ -673,9 +686,10 @@ contract VoteController {
             uint256[] memory rewards = new uint256[](1);
             rewards[0] = reward;
 
+            // current implementation doesn't differentiate supply and borrow reward speeds
             comp._setRewardSpeeds(addrs, rewards, rewards);
             updates.push(Updated(addr, reward, block.timestamp));
-            emit RewardUpdated(addr, reward, block.timestamp);
+            emit RewardsUpdated(addr, reward, reward, fixedRewardWeights[markets.at(i)], relWeight);
         }
 
         // shift the epoch so the booster of the needed users can be decreased
@@ -723,6 +737,8 @@ contract VoteController {
                 toUpdate.remove(account);
             }
         }
+
+        emit BoostersUpdated(userAmount);
     }
 
     // returns the number of users which boosters could be updated this epoch

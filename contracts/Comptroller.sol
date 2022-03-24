@@ -14,6 +14,7 @@ interface I0vix {
 
 interface IUnitroller {
     function admin() external view returns (address);
+
     function _acceptImplementation() external returns (uint256);
 }
 
@@ -335,10 +336,13 @@ contract Comptroller is
             return uint256(Error.MARKET_NOT_LISTED);
         }
 
-        if(IOToken(oToken).balanceOf(minter) == 0 && markets[oToken].autoCollaterize) {
-           addToMarketInternal(IOToken(oToken), minter);
+        if (
+            IOToken(oToken).balanceOf(minter) == 0 &&
+            markets[oToken].autoCollaterize
+        ) {
+            addToMarketInternal(IOToken(oToken), minter);
         }
-        
+
         updateAndDistributeSupplierRewardsForToken(oToken, minter);
 
         return uint256(Error.NO_ERROR);
@@ -1228,7 +1232,10 @@ contract Comptroller is
      * @param _autoCollaterize Boolean value representing whether the market should have auto-collateralisation enabled
      * @return uint 0=success, otherwise a failure. (See enum Error for details)
      */
-    function _supportMarket(IOToken oToken, bool _autoCollaterize) external returns (uint256) {
+    function _supportMarket(IOToken oToken, bool _autoCollaterize)
+        external
+        returns (uint256)
+    {
         if (msg.sender != admin) {
             return
                 fail(
@@ -1507,7 +1514,7 @@ contract Comptroller is
             uint256(supplyState.timestamp);
         if (deltaBlocks > 0) {
             if (supplySpeed > 0) {
-                uint256 supplyTokens = boostManager.boostedTotalSupply(oToken);
+                uint256 supplyTokens = address(boostManager) == address(0) ? IOToken(oToken).totalSupply() : boostManager.boostedTotalSupply(oToken);
                 uint256 rewardAccrued = deltaBlocks * supplySpeed;
                 Double memory ratio = supplyTokens > 0
                     ? fraction(rewardAccrued, supplyTokens)
@@ -1537,7 +1544,7 @@ contract Comptroller is
         if (deltaBlocks > 0) {
             if (borrowSpeed > 0) {
                 uint256 borrowAmount = div_(
-                    boostManager.boostedTotalBorrows(oToken),
+                     address(boostManager) == address(0) ? IOToken(oToken).totalBorrows() : boostManager.boostedTotalBorrows(oToken),
                     marketBorrowIndex
                 );
                 uint256 rewardAccrued = deltaBlocks * borrowSpeed;
@@ -1583,7 +1590,7 @@ contract Comptroller is
             mantissa: supplyIndex - supplierIndex
         });
 
-        uint256 supplierTokens = boostManager.boostedSupplyBalanceOf(
+        uint256 supplierTokens = address(boostManager) == address(0) ? IOToken(oToken).balanceOf(supplier) : boostManager.boostedSupplyBalanceOf(
             oToken,
             supplier
         );
@@ -1637,7 +1644,7 @@ contract Comptroller is
         });
 
         uint256 borrowerAmount = div_(
-            boostManager.boostedBorrowBalanceOf(oToken, borrower),
+             address(boostManager) == address(0) ? IOToken(oToken).borrowBalanceStored(borrower) : boostManager.boostedBorrowBalanceOf(oToken, borrower),
             marketBorrowIndex
         );
 
@@ -1756,12 +1763,15 @@ contract Comptroller is
         returns (uint256)
     {
         I0vix vix = I0vix(getVixAddress());
-        uint256 rewardRemaining = vix.balanceOf(address(this));
-        if (amount > 0 && amount <= rewardRemaining) {
-            vix.transfer(user, amount);
-            emit VixClaimed(user, amount);
-            return 0;
+        if (address(vix) != address(0)) {
+            uint256 rewardRemaining = vix.balanceOf(address(this));
+            if (amount > 0 && amount <= rewardRemaining) {
+                vix.transfer(user, amount);
+                emit VixClaimed(user, amount);
+                return 0;
+            }
         }
+
         return amount;
     }
 
