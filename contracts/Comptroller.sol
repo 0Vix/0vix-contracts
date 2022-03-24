@@ -6,7 +6,7 @@ import "./libraries/ExponentialNoError.sol";
 import "./interfaces/IComptroller.sol";
 import "./ComptrollerStorage.sol";
 
-interface IOvix {
+interface I0vix {
     function transfer(address, uint256) external;
 
     function balanceOf(address) external view returns (uint256);
@@ -14,13 +14,13 @@ interface IOvix {
 
 interface IUnitroller {
     function admin() external view returns (address);
-
     function _acceptImplementation() external returns (uint256);
 }
 
 /**
- * @title Compound's Comptroller Contract
- * @author Compound
+ * @title Comptroller Contract
+ * @author 0VIX Protocol 
+ * @notice Based on Compound's Comptroller with some changes inspired by BENQi.fi
  */
 contract Comptroller is
     ComptrollerV7Storage,
@@ -133,7 +133,7 @@ contract Comptroller is
     // No collateralFactorMantissa may exceed this value
     uint256 internal constant collateralFactorMaxMantissa = 0.9e18; // 0.9
 
-    address oAddress;
+    address vixAddress;
     address public rewardUpdater;
 
     modifier onlyAdmin() {
@@ -335,13 +335,10 @@ contract Comptroller is
             return uint256(Error.MARKET_NOT_LISTED);
         }
 
-        if (
-            IOToken(oToken).balanceOf(minter) == 0 &&
-            markets[oToken].autoCollaterize
-        ) {
-            addToMarketInternal(IOToken(oToken), minter);
+        if(IOToken(oToken).balanceOf(minter) == 0 && markets[oToken].autoCollaterize) {
+           addToMarketInternal(IOToken(oToken), minter);
         }
-
+        
         updateAndDistributeSupplierRewardsForToken(oToken, minter);
 
         return uint256(Error.NO_ERROR);
@@ -1231,10 +1228,7 @@ contract Comptroller is
      * @param _autoCollaterize Boolean value representing whether the market should have auto-collateralisation enabled
      * @return uint 0=success, otherwise a failure. (See enum Error for details)
      */
-    function _supportMarket(IOToken oToken, bool _autoCollaterize)
-        external
-        returns (uint256)
-    {
+    function _supportMarket(IOToken oToken, bool _autoCollaterize) external returns (uint256) {
         if (msg.sender != admin) {
             return
                 fail(
@@ -1442,7 +1436,7 @@ contract Comptroller is
         return msg.sender == admin || msg.sender == comptrollerImplementation;
     }
 
-    /*** Comp Distribution ***/
+    /*** VIX Distribution ***/
 
     /**
      * @notice Set Reward speed for a single market
@@ -1455,7 +1449,7 @@ contract Comptroller is
         uint256 supplySpeed,
         uint256 borrowSpeed
     ) internal {
-        require(markets[address(oToken)].isListed, "comp market is not listed");
+        require(markets[address(oToken)].isListed, "0VIX market is not listed");
 
         if (rewardSupplySpeeds[address(oToken)] != supplySpeed) {
             // Supply speed updated so let's update supply state to ensure that
@@ -1513,7 +1507,7 @@ contract Comptroller is
             uint256(supplyState.timestamp);
         if (deltaBlocks > 0) {
             if (supplySpeed > 0) {
-                uint256 supplyTokens = address(boostManager) == address(0) ? IOToken(oToken).totalSupply() : boostManager.boostedTotalSupply(oToken);
+                uint256 supplyTokens = boostManager.boostedTotalSupply(oToken);
                 uint256 rewardAccrued = deltaBlocks * supplySpeed;
                 Double memory ratio = supplyTokens > 0
                     ? fraction(rewardAccrued, supplyTokens)
@@ -1543,7 +1537,7 @@ contract Comptroller is
         if (deltaBlocks > 0) {
             if (borrowSpeed > 0) {
                 uint256 borrowAmount = div_(
-                     address(boostManager) == address(0) ? IOToken(oToken).totalBorrows() : boostManager.boostedTotalBorrows(oToken),
+                    boostManager.boostedTotalBorrows(oToken),
                     marketBorrowIndex
                 );
                 uint256 rewardAccrued = deltaBlocks * borrowSpeed;
@@ -1572,10 +1566,10 @@ contract Comptroller is
 
         MarketState storage supplyState = supplyState[oToken];
         uint256 supplyIndex = supplyState.index;
-        uint256 supplierIndex = compSupplierIndex[oToken][supplier];
+        uint256 supplierIndex = rewardSupplierIndex[oToken][supplier];
 
-        // Update supplier's index to the current index since we are distributing accrued COMP
-        compSupplierIndex[oToken][supplier] = supplyIndex;
+        // Update supplier's index to the current index since we are distributing accrued VIX
+        rewardSupplierIndex[oToken][supplier] = supplyIndex;
 
         if (supplierIndex == 0 && supplyIndex >= marketInitialIndex) {
             // Covers the case where users supplied tokens before the market's supply state index was set.
@@ -1589,7 +1583,7 @@ contract Comptroller is
             mantissa: supplyIndex - supplierIndex
         });
 
-        uint256 supplierTokens = address(boostManager) == address(0) ? IOToken(oToken).balanceOf(supplier) : boostManager.boostedSupplyBalanceOf(
+        uint256 supplierTokens = boostManager.boostedSupplyBalanceOf(
             oToken,
             supplier
         );
@@ -1627,7 +1621,7 @@ contract Comptroller is
         uint256 borrowIndex = borrowState.index;
         uint256 borrowerIndex = rewardBorrowerIndex[oToken][borrower];
 
-        // Update borrowers's index to the current index since we are distributing accrued COMP
+        // Update borrowers's index to the current index since we are distributing accrued VIX
         rewardBorrowerIndex[oToken][borrower] = borrowIndex;
 
         if (borrowerIndex == 0 && borrowIndex >= marketInitialIndex) {
@@ -1643,7 +1637,7 @@ contract Comptroller is
         });
 
         uint256 borrowerAmount = div_(
-             address(boostManager) == address(0) ? IOToken(oToken).borrowBalanceStored(borrower) : boostManager.boostedBorrowBalanceOf(oToken, borrower),
+            boostManager.boostedBorrowBalanceOf(oToken, borrower),
             marketBorrowIndex
         );
 
@@ -1752,7 +1746,7 @@ contract Comptroller is
 
     /**
      * @notice Transfer Reward to the user
-     * @dev Note: If there is not enough COMP, we do not perform the transfer all.
+     * @dev Note: If there is not enough VIX, we do not perform the transfer all.
      * @param user The address of the user to transfer Reward to
      * @param amount The amount of Reward to (possibly) transfer
      * @return The amount of Reward which was NOT transferred to the user
@@ -1761,23 +1755,21 @@ contract Comptroller is
         internal
         returns (uint256)
     {
-        IOvix vix = IOvix(getVixAddress());
-        if (address(vix) != address(0)) {
-            uint256 rewardRemaining = vix.balanceOf(address(this));
-            if (amount > 0 && amount <= rewardRemaining) {
-                vix.transfer(user, amount);
-                return 0;
-            }
+        I0vix vix = I0vix(getVixAddress());
+        uint256 rewardRemaining = vix.balanceOf(address(this));
+        if (amount > 0 && amount <= rewardRemaining) {
+            vix.transfer(user, amount);
+            emit VixClaimed(user, amount);
+            return 0;
         }
-
         return amount;
     }
 
-    /*** Comp Distribution Admin ***/
+    /*** VIX Distribution Admin ***/
 
     /**
      * @notice Transfer Reward to the recipient
-     * @dev Note: If there is not enough COMP, we do not perform the transfer all.
+     * @dev Note: If there is not enough VIX, we do not perform the transfer all.
      * @param recipient The address of the recipient to transfer Reward to
      * @param amount The amount of Reward to (possibly) transfer
      */
@@ -1808,7 +1800,7 @@ contract Comptroller is
         require(
             numTokens == supplySpeeds.length &&
                 numTokens == borrowSpeeds.length,
-            "Comptroller::_setCompSpeeds invalid input"
+            "Comptroller::_setRewardSpeeds invalid input"
         );
 
         for (uint256 i = 0; i < numTokens; ++i) {
@@ -1873,18 +1865,18 @@ contract Comptroller is
     }
 
     /**
-     * @notice Return the address of the Reward token
-     * @return The address of COMP
+     * @notice Return the address of the 0VIX token
+     * @return The address of VIX
      */
     function getVixAddress() public view returns (address) {
-        return oAddress;
+        return vixAddress;
     }
 
     /**
-     * @notice Set the Ovix token address
+     * @notice Set the 0VIX token address
      */
-    function setOAddress(address newOAddress) public onlyAdmin {
-        oAddress = newOAddress;
+    function setVixAddress(address newVixAddress) public onlyAdmin {
+        vixAddress = newVixAddress;
     }
 
     /**

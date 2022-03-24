@@ -91,25 +91,25 @@ abstract contract ComptrollerV3Storage is ComptrollerV2Storage {
     /// @notice A list of all markets
     IOToken[] public allMarkets;
 
-    /// @notice The rate at which the flywheel distributes COMP, per second
+    /// @notice The rate at which the flywheel distributes VIX, per second
     uint public compRate;
 
     /// @notice The portion of compRate that each market currently receives
     mapping(address => uint) public rewardSpeeds;
 
-    /// @notice The COMP market supply state for each market
+    /// @notice The 0VIX market supply state for each market
     mapping(address => MarketState) public supplyState;
 
-    /// @notice The COMP market borrow state for each market
+    /// @notice The 0VIX market borrow state for each market
     mapping(address => MarketState) public borrowState;
 
-    /// @notice The COMP borrow index for each market for each supplier as of the last time they accrued COMP
-    mapping(address => mapping(address => uint)) public compSupplierIndex;
+    /// @notice The 0VIX borrow index for each market for each supplier as of the last time they accrued VIX
+    mapping(address => mapping(address => uint)) public rewardSupplierIndex;
 
-    /// @notice The COMP borrow index for each market for each borrower as of the last time they accrued COMP
+    /// @notice The 0VIX borrow index for each market for each borrower as of the last time they accrued VIX
     mapping(address => mapping(address => uint)) public rewardBorrowerIndex;
 
-    /// @notice The COMP accrued but not yet transferred to each user
+    /// @notice The VIX accrued but not yet transferred to each user
     mapping(address => uint) public rewardAccrued;
 }
 
@@ -122,23 +122,23 @@ abstract contract ComptrollerV4Storage is ComptrollerV3Storage {
 }
 
 abstract contract ComptrollerV5Storage is ComptrollerV4Storage {
-    /// @notice The portion of COMP that each contributor receives per second
+    /// @notice The portion of VIX that each contributor receives per second
     mapping(address => uint) public rewardContributorSpeeds;
 
-    /// @notice Last timestamp at which a contributor's COMP rewards have been allocated
+    /// @notice Last timestamp at which a contributor's VIX rewards have been allocated
     mapping(address => uint) public lastContributorTimestamp;
 }
 
 abstract contract ComptrollerV6Storage is ComptrollerV5Storage {
-    /// @notice The rate at which comp is distributed to the corresponding borrow market (per second)
+    /// @notice The rate at which VIX is distributed to the corresponding borrow market (per second)
     mapping(address => uint) public rewardBorrowSpeeds;
 
-    /// @notice The rate at which comp is distributed to the corresponding supply market (per second)
+    /// @notice The rate at which VIX is distributed to the corresponding supply market (per second)
     mapping(address => uint) public rewardSupplySpeeds;
 }
 
 abstract contract ComptrollerV7Storage is ComptrollerV6Storage {
-    /// @notice Accounting storage mapping account addresses to how much COMP they owe the protocol.
+    /// @notice Accounting storage mapping account addresses to how much VIX they owe the protocol.
     mapping(address => uint) public rewardReceivable;
 
     IBoostManager public boostManager;
