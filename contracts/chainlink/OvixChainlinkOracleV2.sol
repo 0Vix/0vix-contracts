@@ -14,16 +14,22 @@ contract OvixChainlinkOracleV2 is PriceOracle {
     uint256 public validPeriod;
     address public oMatic;
 
+    struct PriceData {
+        uint256 updatedAt;
+        uint256 price;
+    }
+
     mapping(IAggregatorV2V3 => uint256) heartbeats;
     mapping(address => IAggregatorV2V3) internal feeds;
-    mapping(address => uint) internal prices;
+    mapping(address => PriceData) internal prices;
 
     event NewAdmin(address oldAdmin, address newAdmin);
     event FeedSet(address feed, address asset);
     event PricePosted(
         address asset,
-        uint previousPriceMantissa,
-        uint newPriceMantissa
+        uint previousPrice,
+        uint newPrice,
+        uint256 updatedAt
     );
     event HeartbeatSet(address feed, uint256 heartbeat);
     event ValidPeriodSet(uint256 validPeriod);
@@ -46,11 +52,11 @@ contract OvixChainlinkOracleV2 is PriceOracle {
         return getPrice(oToken);
     }
 
-    function getPrice(IOToken oToken) public view returns (uint price) {
+    function getPrice(IOToken oToken) internal view returns (uint price) {
         IEIP20 token = IEIP20(OErc20(address(oToken)).underlying());
 
-        if (prices[address(oToken)] != 0) {
-            price = prices[address(oToken)];
+        if (prices[address(oToken)].price != 0) {
+            price = prices[address(oToken)].price;
         } else {
             price = getChainlinkPrice(getFeed(address(oToken)));
         }
@@ -103,8 +109,8 @@ contract OvixChainlinkOracleV2 is PriceOracle {
             updatedAt = block.timestamp;
         }
 
-        emit PricePosted(oToken, prices[oToken], underlyingPriceMantissa);
-        prices[oToken] = underlyingPriceMantissa;
+        emit PricePosted(oToken, prices[oToken].price, underlyingPriceMantissa, updatedAt);
+        prices[oToken] = PriceData(underlyingPriceMantissa, updatedAt);
     }
 
     function setFeed(
