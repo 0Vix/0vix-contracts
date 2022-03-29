@@ -7,7 +7,7 @@ import "../otokens/interfaces/IOToken.sol";
 import "../interfaces/IComptroller.sol";
 
 contract BoostManager is Ownable {
-    bool public init = true; //todo set to true when using proxy
+    bool public init; //todo set to true when using proxy
     uint256 private constant MULTIPLIER = 10**18;
 
     IERC20 public veOVIX;
@@ -24,7 +24,9 @@ contract BoostManager is Ownable {
     mapping(address => uint256) private deltaTotalSupply;
     mapping(address => uint256) private deltaTotalBorrows;
 
-    constructor() {}
+    constructor(bool _init) {
+        init = _init;
+    }
 
     function initialize(
         IERC20 ve,
