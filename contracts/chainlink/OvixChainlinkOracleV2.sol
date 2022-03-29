@@ -82,7 +82,7 @@ contract OvixChainlinkOracleV2 is PriceOracle {
         require(updatedAt > 0, "Round not complete");
         require(
             block.timestamp <= updatedAt.add((heartbeats[feed] * 15) / 10),
-            "Update time exceeded"
+            "Update time (heartbeat) exceeded"
         );
 
         // Ensure that we don't multiply the result by 0
