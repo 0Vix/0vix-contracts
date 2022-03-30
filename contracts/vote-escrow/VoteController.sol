@@ -684,7 +684,7 @@ contract VoteController {
             addrs[0] = addr;
 
             uint256[] memory rewards = new uint256[](1);
-            rewards[0] = reward;
+            rewards[0] = reward/2;
 
             // current implementation doesn't differentiate supply and borrow reward speeds
             comp._setRewardSpeeds(addrs, rewards, rewards);
