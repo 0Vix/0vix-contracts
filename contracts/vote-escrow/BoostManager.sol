@@ -18,6 +18,12 @@ contract BoostManager is Ownable {
     mapping(address => mapping(address => uint256)) public supplyBoosterBasis;
     // market => user => borrow boostBasis
     mapping(address => mapping(address => uint256)) public borrowBoosterBasis;
+    // market => user => old supply balance deltas
+    mapping(address => mapping(address => uint256))
+        public oldSupplyBalanceDeltas;
+    // market => user => old borrow balance deltas
+    mapping(address => mapping(address => uint256))
+        public oldBorrowBalanceDeltas;
     // user => veBalance
     mapping(address => uint256) public veBalances;
 
@@ -131,15 +137,13 @@ contract BoostManager is Ownable {
     function updateBoostSupplyBalances(
         address market,
         address user,
-        uint256 oldBalance,
+        uint256 oldBalance,     // todo: removing oldbalance: needs to be updated in oToken too. keep it until updating the oToken is necessary
         uint256 newBalance
     ) external onlyAuthorized {
         _updateBoostBalance(
             market,
             user,
-            oldBalance,
             newBalance,
-            supplyBoosterBasis[market][user],
             supplyBoosterBasis[market][user],
             0
         );
@@ -148,15 +152,13 @@ contract BoostManager is Ownable {
     function updateBoostBorrowBalances(
         address market,
         address user,
-        uint256 oldBalance,
+        uint256 oldBalance,     // todo: removing oldbalance: needs to be updated in oToken too. keep it until updating the oToken is necessary
         uint256 newBalance
     ) external onlyAuthorized {
         _updateBoostBalance(
             market,
             user,
-            oldBalance,
             newBalance,
-            borrowBoosterBasis[market][user],
             borrowBoosterBasis[market][user],
             1
         );
@@ -165,23 +167,18 @@ contract BoostManager is Ownable {
     function _updateBoostBalance(
         address market,
         address user,
-        uint256 oldBalance,
         uint256 newBalance,
-        uint256 oldBoostBasis,
         uint256 newBoostBasis,
         uint256 marketType
     ) internal {
-        uint256 deltaOldBalance = calcBoostedBalance(
-            user,
-            oldBoostBasis,
-            oldBalance
-        ) - oldBalance;
-        uint256 deltaNewBalance = calcBoostedBalance(
-            user,
-            newBoostBasis,
-            newBalance
-        ) - newBalance;
         if (marketType == 0) {
+            uint256 deltaOldBalance = oldSupplyBalanceDeltas[market][user];
+            uint256 deltaNewBalance = calcBoostedBalance(
+                user,
+                newBoostBasis,
+                newBalance
+            ) - newBalance;
+
             deltaTotalSupply[market] =
                 deltaTotalSupply[market] +
                 deltaNewBalance -
@@ -194,7 +191,15 @@ contract BoostManager is Ownable {
                 deltaTotalSupply[market],
                 marketType
             );
+            oldSupplyBalanceDeltas[market][user] = deltaNewBalance;
         } else {
+            uint256 deltaOldBalance = oldBorrowBalanceDeltas[market][user];
+            uint256 deltaNewBalance = calcBoostedBalance(
+                user,
+                newBoostBasis,
+                newBalance
+            ) - newBalance;
+
             deltaTotalBorrows[market] =
                 deltaTotalBorrows[market] +
                 deltaNewBalance -
@@ -207,6 +212,7 @@ contract BoostManager is Ownable {
                 deltaTotalBorrows[market],
                 marketType
             );
+            oldBorrowBalanceDeltas[market][user] = deltaNewBalance;
         }
     }
 
@@ -220,13 +226,13 @@ contract BoostManager is Ownable {
         require(marketType <= 1, "wrong market type");
 
         if (marketType == 0) {
-            if (IOToken(market).totalSupply() == 0) return 0; // nothing to calculate if market is empty
-            return ((veOVIX.totalSupply() * MULTIPLIER) / // todo: check correctness of zero balance handling
-                IOToken(market).totalSupply()); // todo
+            if (IOToken(market).totalSupply() == 0) return 0;
+            return ((veOVIX.totalSupply() * MULTIPLIER) / 
+                IOToken(market).totalSupply());
         } else {
             if (IOToken(market).totalBorrows() == 0) return 0;
-            return ((veOVIX.totalSupply() * MULTIPLIER) / // todo
-                IOToken(market).totalBorrows()); // todo
+            return ((veOVIX.totalSupply() * MULTIPLIER) /
+                IOToken(market).totalBorrows());
         }
     }
 
