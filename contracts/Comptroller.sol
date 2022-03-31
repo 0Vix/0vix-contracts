@@ -1273,26 +1273,26 @@ contract Comptroller is
     function _initializeMarket(address oToken) internal {
         uint32 timestamp = safe32(getTimestamp());
 
-        MarketState storage supplyState = supplyState[oToken];
-        MarketState storage borrowState = borrowState[oToken];
+        MarketState storage supState = supplyState[oToken];
+        MarketState storage borState = borrowState[oToken];
 
         /*
          * Update market state indices
          */
-        if (supplyState.index == 0) {
+        if (supState.index == 0) {
             // Initialize supply state index with default value
-            supplyState.index = marketInitialIndex;
+            supState.index = marketInitialIndex;
         }
 
-        if (borrowState.index == 0) {
+        if (borState.index == 0) {
             // Initialize borrow state index with default value
-            borrowState.index = marketInitialIndex;
+            borState.index = marketInitialIndex;
         }
 
         /*
          * Update market state timestamps
          */
-        supplyState.timestamp = borrowState.timestamp = timestamp;
+        supState.timestamp = borState.timestamp = timestamp;
     }
 
     /**
@@ -1571,14 +1571,14 @@ contract Comptroller is
         // This check should be as gas efficient as possible as distributeSupplierReward is called in many places.
         // - We really don't want to call an external contract as that's quite expensive.
 
-        MarketState storage supplyState = supplyState[oToken];
-        uint256 supplyIndex = supplyState.index;
+        MarketState storage supState = supplyState[oToken];
+        uint256 supplyIndex = supState.index;
         uint256 supplierIndex = rewardSupplierIndex[oToken][supplier];
 
         // Update supplier's index to the current index since we are distributing accrued VIX
         rewardSupplierIndex[oToken][supplier] = supplyIndex;
 
-        if (supplierIndex == 0 && supplyIndex >= marketInitialIndex) {
+        if (supplierIndex == 0 && supplyIndex >= 0) {
             // Covers the case where users supplied tokens before the market's supply state index was set.
             // Rewards the user with Reward accrued from the start of when supplier rewards were first
             // set for the market.
@@ -1624,8 +1624,8 @@ contract Comptroller is
         // This check should be as gas efficient as possible as distributeBorrowerReward is called in many places.
         // - We really don't want to call an external contract as that's quite expensive.
 
-        MarketState storage borrowState = borrowState[oToken];
-        uint256 borrowIndex = borrowState.index;
+        MarketState storage borState = borrowState[oToken];
+        uint256 borrowIndex = borState.index;
         uint256 borrowerIndex = rewardBorrowerIndex[oToken][borrower];
 
         // Update borrowers's index to the current index since we are distributing accrued VIX
