@@ -34,10 +34,10 @@ contract VoteController {
     IBoostManager public boostManager;
 
     // 7 * 86400 seconds - all future times are rounded by week
-    uint256 public PERIOD; //todo set back to constant
+    uint256 public constant PERIOD = 7 * 86400;
 
     // Cannot change weight votes more often than once in 10 days
-    uint256 public WEIGHT_VOTE_DELAY; //todo set back to constant
+    uint256 public constant WEIGHT_VOTE_DELAY = 10 * 86400;
 
     uint256 public constant MULTIPLIER = 10**18;
 
@@ -68,12 +68,6 @@ contract VoteController {
     struct Market {
         address market;
         uint256 weight;
-    }
-
-    struct Updated {
-        address market;
-        uint256 reward;
-        uint256 timestamp;
     }
 
     // to keep track of regular epoch changes and users' boooster update lists corresponding to it
@@ -118,8 +112,6 @@ contract VoteController {
     mapping(address => uint256) public fixedRewardWeights;
 
     mapping(uint256 => EnumerableSet.AddressSet) private userAcitivties;
-
-    Updated[] public updates;
 
     event CommitOwnership(address admin);
 
@@ -199,8 +191,6 @@ contract VoteController {
 
         admin = msg.sender;
         votingEscrow = _votingEscrow;
-        PERIOD = 604800;
-        WEIGHT_VOTE_DELAY = 10 * 86400;
         timeTotal = (block.timestamp / PERIOD) * PERIOD;
         votablePercentage = 3000;
     }
@@ -688,7 +678,6 @@ contract VoteController {
 
             // current implementation doesn't differentiate supply and borrow reward speeds
             comp._setRewardSpeeds(addrs, rewards, rewards);
-            updates.push(Updated(addr, reward, block.timestamp));
             emit RewardsUpdated(addr, reward, reward, fixedRewardWeights[markets.at(i)], relWeight);
         }
 
@@ -767,30 +756,5 @@ contract VoteController {
 
     function isMarketListed(address _market) external view returns(bool) {
         return markets.contains(_market);
-    }
-
-    // dev functions
-    function setPeriodHour(uint256 delayMultiplier) external onlyAdmin {
-        PERIOD = 60 * 60;
-        WEIGHT_VOTE_DELAY = PERIOD * delayMultiplier;
-        checkpointAll();
-    }
-
-    function setPeriodWeek() external onlyAdmin {
-        PERIOD = 604800;
-        WEIGHT_VOTE_DELAY = 10 * 86400;
-        checkpointAll();
-    }
-
-    function getUpdateLength() public view returns (uint256) {
-        return updates.length;
-    }
-
-    function getAllUpdates() public view returns (Updated[] memory) {
-        Updated[] memory result = new Updated[](updates.length);
-        for (uint256 i = 0; i < updates.length; i++) {
-            result[i] = updates[i];
-        }
-        return result;
     }
 }

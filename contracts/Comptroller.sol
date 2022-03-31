@@ -1583,10 +1583,7 @@ contract Comptroller is
         rewardSupplierIndex[oToken][supplier] = supplyIndex;
 
         if (supplierIndex == 0 && supplyIndex >= 0) {
-            // Covers the case where users supplied tokens before the market's supply state index was set.
-            // Rewards the user with Reward accrued from the start of when supplier rewards were first
-            // set for the market.
-            supplierIndex = marketInitialIndex;
+            supplierIndex = supplyIndex;
         }
 
         // Calculate change in the cumulative sum of the Reward per oToken accrued
@@ -1636,11 +1633,8 @@ contract Comptroller is
         // Update borrowers's index to the current index since we are distributing accrued VIX
         rewardBorrowerIndex[oToken][borrower] = borrowIndex;
 
-        if (borrowerIndex == 0 && borrowIndex >= marketInitialIndex) {
-            // Covers the case where users borrowed tokens before the market's borrow state index was set.
-            // Rewards the user with Reward accrued from the start of when borrower rewards were first
-            // set for the market.
-            borrowerIndex = marketInitialIndex;
+        if (borrowerIndex == 0 && borrowIndex >= 0) {
+            borrowerIndex = borrowIndex;
         }
 
         // Calculate change in the cumulative sum of the Reward per borrowed unit accrued
