@@ -20,7 +20,7 @@ interface IUnitroller {
 
 /**
  * @title Comptroller Contract
- * @author 0VIX Protocol 
+ * @author 0VIX Protocol
  * @notice Based on Compound's Comptroller with some changes inspired by BENQi.fi
  */
 contract Comptroller is
@@ -1514,7 +1514,9 @@ contract Comptroller is
             uint256(supplyState.timestamp);
         if (deltaBlocks > 0) {
             if (supplySpeed > 0) {
-                uint256 supplyTokens = address(boostManager) == address(0) ? IOToken(oToken).totalSupply() : boostManager.boostedTotalSupply(oToken);
+                uint256 supplyTokens = address(boostManager) == address(0)
+                    ? IOToken(oToken).totalSupply()
+                    : boostManager.boostedTotalSupply(oToken);
                 uint256 rewardAccrued = deltaBlocks * supplySpeed;
                 Double memory ratio = supplyTokens > 0
                     ? fraction(rewardAccrued, supplyTokens)
@@ -1544,7 +1546,9 @@ contract Comptroller is
         if (deltaBlocks > 0) {
             if (borrowSpeed > 0) {
                 uint256 borrowAmount = div_(
-                     address(boostManager) == address(0) ? IOToken(oToken).totalBorrows() : boostManager.boostedTotalBorrows(oToken),
+                    address(boostManager) == address(0)
+                        ? IOToken(oToken).totalBorrows()
+                        : boostManager.boostedTotalBorrows(oToken),
                     marketBorrowIndex
                 );
                 uint256 rewardAccrued = deltaBlocks * borrowSpeed;
@@ -1590,23 +1594,24 @@ contract Comptroller is
             mantissa: supplyIndex - supplierIndex
         });
 
-        uint256 supplierTokens = address(boostManager) == address(0) ? IOToken(oToken).balanceOf(supplier) : boostManager.boostedSupplyBalanceOf(
-            oToken,
-            supplier
-        );
+        uint256 supplierTokens = address(boostManager) == address(0)
+            ? IOToken(oToken).balanceOf(supplier)
+            : boostManager.boostedSupplyBalanceOf(oToken, supplier);
 
-        // Calculate Reward accrued: oTokenAmount * accruedPerOToken
-        uint256 supplierDelta = mul_(supplierTokens, deltaIndex);
+        if (supplyIndex != supplierIndex) {
+            // Calculate Reward accrued: oTokenAmount * accruedPerOToken
+            uint256 supplierDelta = mul_(supplierTokens, deltaIndex);
 
-        uint256 supplierAccrued = rewardAccrued[supplier] + supplierDelta;
-        rewardAccrued[supplier] = supplierAccrued;
+            uint256 supplierAccrued = rewardAccrued[supplier] + supplierDelta;
+            rewardAccrued[supplier] = supplierAccrued;
 
-        emit DistributedSupplierReward(
-            IOToken(oToken),
-            supplier,
-            supplierDelta,
-            supplyIndex
-        );
+            emit DistributedSupplierReward(
+                IOToken(oToken),
+                supplier,
+                supplierDelta,
+                supplyIndex
+            );
+        }
     }
 
     /**
@@ -1643,23 +1648,27 @@ contract Comptroller is
             mantissa: borrowIndex - borrowerIndex
         });
 
-        uint256 borrowerAmount = div_(
-             address(boostManager) == address(0) ? IOToken(oToken).borrowBalanceStored(borrower) : boostManager.boostedBorrowBalanceOf(oToken, borrower),
-            marketBorrowIndex
-        );
+        if (borrowIndex != borrowerIndex) {
+            uint256 borrowerAmount = div_(
+                address(boostManager) == address(0)
+                    ? IOToken(oToken).borrowBalanceStored(borrower)
+                    : boostManager.boostedBorrowBalanceOf(oToken, borrower),
+                marketBorrowIndex
+            );
 
-        // Calculate Reward accrued: oTokenAmount * accruedPerBorrowedUnit
-        uint256 borrowerDelta = mul_(borrowerAmount, deltaIndex);
+            // Calculate Reward accrued: oTokenAmount * accruedPerBorrowedUnit
+            uint256 borrowerDelta = mul_(borrowerAmount, deltaIndex);
 
-        uint256 borrowerAccrued = rewardAccrued[borrower] + borrowerDelta;
-        rewardAccrued[borrower] = borrowerAccrued;
+            uint256 borrowerAccrued = rewardAccrued[borrower] + borrowerDelta;
+            rewardAccrued[borrower] = borrowerAccrued;
 
-        emit DistributedBorrowerReward(
-            IOToken(oToken),
-            borrower,
-            borrowerDelta,
-            borrowIndex
-        );
+            emit DistributedBorrowerReward(
+                IOToken(oToken),
+                borrower,
+                borrowerDelta,
+                borrowIndex
+            );
+        }
     }
 
     /**
@@ -1906,8 +1915,8 @@ contract Comptroller is
     }
 
     function setAutoCollaterize(address market, bool flag) external onlyAdmin {
-           markets[market].autoCollaterize = flag;
-           emit MarketAutoCollateralized(flag);
+        markets[market].autoCollaterize = flag;
+        emit MarketAutoCollateralized(flag);
     }
 
     /**
