@@ -78,35 +78,21 @@ contract BoostManager is Ownable {
         uint256 userSupply = IOToken(market).balanceOf(user);
         uint256 userBorrows = IOToken(market).borrowBalanceStored(user);
         if (userSupply > 0) {
-            uint256 oldSupplyBoostBasis = supplyBoosterBasis[market][user];
-            comptroller.updateAndDistributeSupplierRewardsForToken(
-                market,
-                user
-            );
             _updateSupplyBoostBasis(market, user);
             _updateBoostBalance(
                 market,
                 user,
                 userSupply,
-                userSupply,
-                oldSupplyBoostBasis,
                 supplyBoosterBasis[market][user],
                 0
             );
         }
         if (userBorrows > 0) {
-            uint256 oldBorrowBoostBasis = borrowBoosterBasis[market][user];
-            comptroller.updateAndDistributeBorrowerRewardsForToken(
-                market,
-                user
-            );
             _updateBorrowBoostBasis(market, user);
             _updateBoostBalance(
                 market,
                 user,
                 userBorrows,
-                userBorrows,
-                oldBorrowBoostBasis,
                 borrowBoosterBasis[market][user],
                 1
             );
