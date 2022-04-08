@@ -78,6 +78,10 @@ contract BoostManager is Ownable {
         uint256 userSupply = IOToken(market).balanceOf(user);
         uint256 userBorrows = IOToken(market).borrowBalanceStored(user);
         if (userSupply > 0) {
+            comptroller.updateAndDistributeSupplierRewardsForToken(
+                market,
+                user
+            );
             _updateSupplyBoostBasis(market, user);
             _updateBoostBalance(
                 market,
@@ -88,6 +92,10 @@ contract BoostManager is Ownable {
             );
         }
         if (userBorrows > 0) {
+            comptroller.updateAndDistributeBorrowerRewardsForToken(
+                market,
+                user
+            );
             _updateBorrowBoostBasis(market, user);
             _updateBoostBalance(
                 market,
@@ -123,7 +131,7 @@ contract BoostManager is Ownable {
     function updateBoostSupplyBalances(
         address market,
         address user,
-        uint256 oldBalance,     // todo: removing oldbalance: needs to be updated in oToken too. keep it until updating the oToken is necessary
+        uint256 oldBalance, // todo: removing oldbalance: needs to be updated in oToken too. keep it until updating the oToken is necessary
         uint256 newBalance
     ) external onlyAuthorized {
         _updateBoostBalance(
@@ -138,7 +146,7 @@ contract BoostManager is Ownable {
     function updateBoostBorrowBalances(
         address market,
         address user,
-        uint256 oldBalance,     // todo: removing oldbalance: needs to be updated in oToken too. keep it until updating the oToken is necessary
+        uint256 oldBalance, // todo: removing oldbalance: needs to be updated in oToken too. keep it until updating the oToken is necessary
         uint256 newBalance
     ) external onlyAuthorized {
         _updateBoostBalance(
@@ -213,7 +221,7 @@ contract BoostManager is Ownable {
 
         if (marketType == 0) {
             if (IOToken(market).totalSupply() == 0) return 0;
-            return ((veOVIX.totalSupply() * MULTIPLIER) / 
+            return ((veOVIX.totalSupply() * MULTIPLIER) /
                 IOToken(market).totalSupply());
         } else {
             if (IOToken(market).totalBorrows() == 0) return 0;
