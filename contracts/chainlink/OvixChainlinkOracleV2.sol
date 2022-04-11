@@ -15,8 +15,8 @@ contract OvixChainlinkOracleV2 is PriceOracle {
     address public oMatic;
 
     struct PriceData {
-        uint256 updatedAt;
         uint256 price;
+        uint256 updatedAt;
     }
 
     mapping(IAggregatorV2V3 => uint256) heartbeats;
