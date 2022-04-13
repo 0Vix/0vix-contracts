@@ -1,3 +1,3 @@
 # 0VIX Smart Contracts
 
-This repository contains the currently deployed versions of the protocol smart contracts.
+This repository contains the recent versions of the protocol's smart contracts.
