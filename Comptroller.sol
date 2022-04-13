@@ -1575,15 +1575,14 @@ contract Comptroller is
         // This check should be as gas efficient as possible as distributeSupplierReward is called in many places.
         // - We really don't want to call an external contract as that's quite expensive.
 
-        MarketState storage supState = supplyState[oToken];
-        uint256 supplyIndex = supState.index;
+        uint256 supplyIndex = supplyState[oToken].index;
         uint256 supplierIndex = rewardSupplierIndex[oToken][supplier];
 
         // Update supplier's index to the current index since we are distributing accrued VIX
         rewardSupplierIndex[oToken][supplier] = supplyIndex;
 
         if (supplierIndex == 0 && supplyIndex >= 0) {
-            supplierIndex = supplyIndex;
+            return;
         }
 
         // Calculate change in the cumulative sum of the Reward per oToken accrued
@@ -1626,15 +1625,14 @@ contract Comptroller is
         // This check should be as gas efficient as possible as distributeBorrowerReward is called in many places.
         // - We really don't want to call an external contract as that's quite expensive.
 
-        MarketState storage borState = borrowState[oToken];
-        uint256 borrowIndex = borState.index;
+        uint256 borrowIndex = borrowState[oToken].index;
         uint256 borrowerIndex = rewardBorrowerIndex[oToken][borrower];
 
         // Update borrowers's index to the current index since we are distributing accrued VIX
         rewardBorrowerIndex[oToken][borrower] = borrowIndex;
 
         if (borrowerIndex == 0 && borrowIndex >= 0) {
-            borrowerIndex = borrowIndex;
+            return;
         }
 
         // Calculate change in the cumulative sum of the Reward per borrowed unit accrued

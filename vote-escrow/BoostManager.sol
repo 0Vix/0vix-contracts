@@ -173,7 +173,7 @@ contract BoostManager is Ownable {
                 newBalance
             ) - newBalance;
 
-            deltaTotalSupply[market] =
+            uint256 newMarketDeltaTotalSupply = deltaTotalSupply[market] =
                 deltaTotalSupply[market] +
                 deltaNewBalance -
                 deltaOldBalance;
@@ -182,7 +182,7 @@ contract BoostManager is Ownable {
                 market,
                 deltaOldBalance,
                 deltaNewBalance,
-                deltaTotalSupply[market],
+                newMarketDeltaTotalSupply,
                 marketType
             );
             oldSupplyBalanceDeltas[market][user] = deltaNewBalance;
@@ -194,7 +194,7 @@ contract BoostManager is Ownable {
                 newBalance
             ) - newBalance;
 
-            deltaTotalBorrows[market] =
+            uint256 newMarketDeltaTotalBorrows = deltaTotalBorrows[market] =
                 deltaTotalBorrows[market] +
                 deltaNewBalance -
                 deltaOldBalance;
@@ -203,7 +203,7 @@ contract BoostManager is Ownable {
                 market,
                 deltaOldBalance,
                 deltaNewBalance,
-                deltaTotalBorrows[market],
+                newMarketDeltaTotalBorrows,
                 marketType
             );
             oldBorrowBalanceDeltas[market][user] = deltaNewBalance;

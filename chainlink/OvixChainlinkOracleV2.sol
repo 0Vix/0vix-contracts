@@ -46,7 +46,7 @@ contract OvixChainlinkOracleV2 is PriceOracle {
         override
         returns (uint)
     {
-        if(address(oToken) == oMatic) {
+        if (address(oToken) == oMatic) {
             return getChainlinkPrice(getFeed(address(oToken)));
         }
         return getPrice(oToken);
@@ -55,11 +55,16 @@ contract OvixChainlinkOracleV2 is PriceOracle {
     function getPrice(IOToken oToken) internal view returns (uint price) {
         IEIP20 token = IEIP20(OErc20(address(oToken)).underlying());
 
-        if (prices[address(oToken)].price != 0) {
+        IAggregatorV2V3 feed = getFeed(address(oToken));
+        if (address(feed) != address(0)) {
+            price = getChainlinkPrice(feed);
+        } else if (
+            prices[address(oToken)].updatedAt >= block.timestamp - validPeriod
+        ) {
             price = prices[address(oToken)].price;
-        } else {
-            price = getChainlinkPrice(getFeed(address(oToken)));
         }
+
+        require(price > 0, "bad price");
 
         uint decimalDelta = uint(18).sub(uint(token.decimals()));
         // Ensure that we don't multiply the result by 0
@@ -109,7 +114,12 @@ contract OvixChainlinkOracleV2 is PriceOracle {
             updatedAt = block.timestamp;
         }
 
-        emit PricePosted(oToken, prices[oToken].price, underlyingPriceMantissa, updatedAt);
+        emit PricePosted(
+            oToken,
+            prices[oToken].price,
+            underlyingPriceMantissa,
+            updatedAt
+        );
         prices[oToken] = PriceData(underlyingPriceMantissa, updatedAt);
     }
 
