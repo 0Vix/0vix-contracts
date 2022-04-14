@@ -7,7 +7,6 @@ import "./interfaces/IBoostManager.sol";
 
 import "../interfaces/IComptroller.sol";
 
-
 /**
  * @title Vote Controller
  * @author 0VIX Protocol (inspired by Curve Finance)
@@ -68,6 +67,7 @@ contract VoteController {
     struct Market {
         address market;
         uint256 weight;
+        uint256 supplyRewardWeight;
     }
 
     // to keep track of regular epoch changes and users' boooster update lists corresponding to it
@@ -113,6 +113,9 @@ contract VoteController {
 
     mapping(uint256 => EnumerableSet.AddressSet) private userAcitivties;
 
+    // used to get a x:y ratio of the total rewards for one market on supply and borrow side
+    mapping(address => uint256) public supplyRewardWeight;
+
     event CommitOwnership(address admin);
 
     event ApplyOwnership(address admin);
@@ -123,11 +126,7 @@ contract VoteController {
         uint256 totalWeight
     );
 
-    event VoteForMarket(
-        address user,
-        address marketAddr,
-        uint256 weight
-    );
+    event VoteForMarket(address user, address marketAddr, uint256 weight);
 
     event NewMarket(address addr);
     event MarketRemoved(address addr);
@@ -144,7 +143,8 @@ contract VoteController {
     event FixedWeightChanged(
         address market,
         uint256 oldWeight,
-        uint256 newWeight
+        uint256 newWeight,
+        uint256 supplyRewardWeight
     );
 
     /// @notice this event logs reward speed set to Comptroller and _relative_ fixed & community weights for the market
@@ -162,9 +162,7 @@ contract VoteController {
     );
 
     /// @notice this event logs the amount of users whose boosters were updated due to their inactivity
-    event BoostersUpdated(
-        uint256 usersUpdated
-    );
+    event BoostersUpdated(uint256 usersUpdated);
 
     modifier onlyAdmin() {
         require(msg.sender == admin, "admin only");
@@ -321,22 +319,60 @@ contract VoteController {
     }
 
     /**
-     * @notice Sets percentage of the emmission community can vote upon
+     * @notice Sets percentage of the emmission community can vote upon and the weight between supply and borrow side
      * @param _market Market's address
      * @param _weight Market's fixed weight with hundredth precision
+     * @param _supplyRewardWeight Market's supply reward weight with hundredth precision
      */
-    function setSingleFixedRewardWeight(address _market, uint256 _weight)
-        external
-        onlyAdmin
-    {
+    function setSingleRewardWeights(
+        address _market,
+        uint256 _weight,
+        uint256 _supplyRewardWeight
+    ) external onlyAdmin {
         Market[] memory market = new Market[](1);
-        market[0] = Market(_market, _weight);
+        market[0] = Market(_market, _weight, _supplyRewardWeight);
         setFixedRewardWeights(market);
     }
 
     /**
+     * @notice Sets the weight between supply and borrow side
+     * @param _market Market's address
+     * @param _supplyRewardWeight Market's supply reward weight with hundredth precision
+     */
+    function setSingleSupplyRewardWeight(
+        address _market,
+        uint256 _supplyRewardWeight
+    ) external onlyAdmin {
+        Market[] memory market = new Market[](1);
+        market[0] = Market(
+            _market,
+            fixedRewardWeights[_market],
+            _supplyRewardWeight
+        );
+        setFixedRewardWeights(market);
+    }
+
+        /**
      * @notice Sets percentage of the emmission community can vote upon
-     * @param _markets The struct containing market's address and its fixed weight with hundredth precision
+     * @param _market Market's address
+     * @param _weight Market's fixed weight with hundredth precision
+     */
+    function setSingleFixedRewardWeight(
+        address _market,
+        uint256 _weight
+    ) external onlyAdmin {
+        Market[] memory market = new Market[](1);
+        market[0] = Market(
+            _market,
+            _weight,
+            supplyRewardWeight[_market]
+        );
+        setFixedRewardWeights(market);
+    }
+
+    /**
+     * @notice Sets percentage of the emmission community can vote upon and the weight between supply and borrow side
+     * @param _markets The struct containing market's address, its fixed weight with hundredth precision and its supply reward weight with hundredth precision
      */
     function setFixedRewardWeights(Market[] memory _markets) public onlyAdmin {
         uint256 sumWeights = 0;
@@ -350,15 +386,21 @@ contract VoteController {
                 markets.contains(_markets[i].market),
                 "Market is not in the list"
             );
-
+            uint256 _supplyRewardWeight = _markets[i].supplyRewardWeight;
+            require(
+                _supplyRewardWeight <= HUNDRED_PERCENT,
+                "supply reward weight > 100%"
+            );
             uint256 oldWeight = fixedRewardWeights[_markets[i].market];
             fixedRewardWeights[_markets[i].market] = _markets[i].weight;
             sumWeights = sumWeights - oldWeight + _markets[i].weight;
+            supplyRewardWeight[_markets[i].market] = _supplyRewardWeight;
 
             emit FixedWeightChanged(
                 _markets[i].market,
                 oldWeight,
-                _markets[i].weight
+                _markets[i].weight,
+                _supplyRewardWeight
             );
         }
 
@@ -496,10 +538,7 @@ contract VoteController {
         uint256 nextTime = ((block.timestamp + PERIOD) / PERIOD) * PERIOD;
 
         require(lockEnd > nextTime, "Your token lock expires too soon");
-        require(
-            _userWeight <= HUNDRED_PERCENT,
-            "Voted with more than 100%"
-        );
+        require(_userWeight <= HUNDRED_PERCENT, "Voted with more than 100%");
 
         require(
             block.timestamp >=
@@ -582,9 +621,7 @@ contract VoteController {
         lastUserVote[msg.sender][_marketAddr] = block.timestamp;
 
         // update the booster of the user
-        boostManager.updateBoostBasis(
-            msg.sender
-        );
+        boostManager.updateBoostBasis(msg.sender);
 
         // the user has voted for the next epoch, essentially updating their booster
         // so the protocol is not able to decrease it by updating during the next 2 epochs
@@ -602,11 +639,7 @@ contract VoteController {
             thirdEpochUpdates.remove(msg.sender);
         }
 
-        emit VoteForMarket(
-            msg.sender,
-            _marketAddr,
-            _userWeight
-        );
+        emit VoteForMarket(msg.sender, _marketAddr, _userWeight);
     }
 
     /**
@@ -673,12 +706,21 @@ contract VoteController {
             address[] memory addrs = new address[](1);
             addrs[0] = addr;
 
-            uint256[] memory rewards = new uint256[](1);
-            rewards[0] = reward/2;
+            uint256[] memory rewardSupply = new uint256[](1);
+            rewardSupply[0] = (reward * supplyRewardWeight[addr]) / HUNDRED_PERCENT;
+
+            uint256[] memory rewardBorrow = new uint256[](1);
+            rewardBorrow[0] = reward - rewardSupply[0];
 
             // current implementation doesn't differentiate supply and borrow reward speeds
-            comp._setRewardSpeeds(addrs, rewards, rewards);
-            emit RewardsUpdated(addr, reward, reward, fixedRewardWeights[markets.at(i)], relWeight);
+            comp._setRewardSpeeds(addrs, rewardSupply, rewardBorrow);
+            emit RewardsUpdated(
+                addr,
+                rewardSupply[0],
+                rewardBorrow[0],
+                fixedRewardWeights[markets.at(i)],
+                relWeight
+            );
         }
 
         // shift the epoch so the booster of the needed users can be decreased
@@ -714,9 +756,7 @@ contract VoteController {
             address account = toUpdate.at(toUpdate.length() - 1);
 
             // update the booster of the user
-            bool boostApplies = boostManager.updateBoostBasis(
-                account
-            );
+            bool boostApplies = boostManager.updateBoostBasis(account);
 
             // check if we need to update the booster in the next epoch's check
             if (boostApplies) {
@@ -754,7 +794,7 @@ contract VoteController {
         return markets.length();
     }
 
-    function isMarketListed(address _market) external view returns(bool) {
+    function isMarketListed(address _market) external view returns (bool) {
         return markets.contains(_market);
     }
 }
