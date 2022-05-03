@@ -312,8 +312,10 @@ contract VoteController {
         isVotable[addr] = false;
 
         markets.remove(addr);
-
-        // todo test what happens with market's lists (e.g. timeWeight[addr]) when re-adding
+        
+        delete timeWeight[addr];
+        delete fixedRewardWeights[addr];
+        delete supplyRewardWeight[addr];
 
         emit MarketRemoved(addr);
     }

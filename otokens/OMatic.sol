@@ -180,29 +180,4 @@ contract OMatic is OToken {
         to.transfer(amount);
     }
 
-    function requireNoError(uint256 errCode, string memory message)
-        internal
-        pure
-    {
-        unchecked {
-            if (errCode == uint256(Error.NO_ERROR)) {
-                return;
-            }
-
-            bytes memory fullMessage = new bytes(bytes(message).length + 5);
-            uint256 i;
-
-            for (i = 0; i < bytes(message).length; i++) {
-                fullMessage[i] = bytes(message)[i];
-            }
-
-            fullMessage[i + 0] = bytes1(uint8(32));
-            fullMessage[i + 1] = bytes1(uint8(40));
-            fullMessage[i + 2] = bytes1(uint8(48 + (errCode / 10)));
-            fullMessage[i + 3] = bytes1(uint8(48 + (errCode % 10)));
-            fullMessage[i + 4] = bytes1(uint8(41));
-
-            require(errCode == uint256(Error.NO_ERROR), string(fullMessage));
-        }
-    }
 }

@@ -47,7 +47,10 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         );
 
         // Set the comptroller
-        require(_setComptroller(comptroller_) == uint256(Error.NO_ERROR), "set comptroller failed");
+        require(
+            _setComptroller(comptroller_) == uint256(Error.NO_ERROR),
+            "set comptroller failed"
+        );
 
         // Initialize block timestamp and borrow index (block timestamp mocks depend on comptroller being set)
         accrualBlockTimestamp = getBlockTimestamp();
@@ -55,7 +58,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         // Set the interest rate model (depends on block timestamp / borrow index)
         require(
-            _setInterestRateModelFresh(interestRateModel_) == uint256(Error.NO_ERROR),
+            _setInterestRateModelFresh(interestRateModel_) ==
+                uint256(Error.NO_ERROR),
             "set interest rate model failed"
         );
 
@@ -77,13 +81,12 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
             boostManager != address(0) &&
             IBoostManager(boostManager).isAuthorized(address(this))
         ) {
-            IBoostManager(boostManager)
-                .updateBoostSupplyBalances(
-                    address(this),
-                    user,
-                    oldBalance,
-                    newBalance
-                );
+            IBoostManager(boostManager).updateBoostSupplyBalances(
+                address(this),
+                user,
+                oldBalance,
+                newBalance
+            );
         }
     }
 
@@ -97,13 +100,12 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
             boostManager != address(0) &&
             IBoostManager(boostManager).isAuthorized(address(this))
         ) {
-            IBoostManager(boostManager)
-                .updateBoostBorrowBalances(
-                    address(this),
-                    user,
-                    oldBalance,
-                    newBalance
-                );
+            IBoostManager(boostManager).updateBoostBorrowBalances(
+                address(this),
+                user,
+                oldBalance,
+                newBalance
+            );
         }
     }
 
@@ -129,19 +131,10 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
             dst,
             tokens
         );
-        if (allowed != 0) {
-            return
-                failOpaque(
-                    Error.COMPTROLLER_REJECTION,
-                    FailureInfo.TRANSFER_COMPTROLLER_REJECTION,
-                    allowed
-                );
-        }
+        require(allowed == 0, "ERC20: transfer not allowed");
 
         /* Do not allow self-transfers */
-        if (src == dst) {
-            return fail(Error.BAD_INPUT, FailureInfo.TRANSFER_NOT_ALLOWED);
-        }
+        require(src != dst, "ERC20: self-transfer not allowed");
 
         /* Get the allowance, infinite for the account owner */
         uint256 startingAllowance = 0;
@@ -158,19 +151,22 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         uint256 dstTokensNew;
 
         (mathErr, allowanceNew) = subUInt(startingAllowance, tokens);
-        if (mathErr != MathError.NO_ERROR) {
-            return fail(Error.MATH_ERROR, FailureInfo.TRANSFER_NOT_ALLOWED);
-        }
+        require(
+            mathErr == MathError.NO_ERROR,
+            "ERC20: decreased allowance below zero"
+        );
 
         (mathErr, srcTokensNew) = subUInt(accountTokens[src], tokens);
-        if (mathErr != MathError.NO_ERROR) {
-            return fail(Error.MATH_ERROR, FailureInfo.TRANSFER_NOT_ENOUGH);
-        }
+        require(
+            mathErr == MathError.NO_ERROR,
+            "ERC20: transfer amount exceeds balance"
+        );
 
         (mathErr, dstTokensNew) = addUInt(accountTokens[dst], tokens);
-        if (mathErr != MathError.NO_ERROR) {
-            return fail(Error.MATH_ERROR, FailureInfo.TRANSFER_TOO_MUCH);
-        }
+        require(
+            mathErr == MathError.NO_ERROR,
+            "ERC20: maximum destination balance reached"
+        );
 
         /////////////////////////
         // EFFECTS & INTERACTIONS
@@ -238,7 +234,11 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @param amount The number of tokens that are approved (-1 means infinite)
      * @return Whether or not the approval succeeded
      */
-    function approve(address spender, uint256 amount) external override returns (bool) {
+    function approve(address spender, uint256 amount)
+        external
+        override
+        returns (bool)
+    {
         address src = msg.sender;
         transferAllowances[src][spender] = amount;
         emit Approval(src, spender, amount);
@@ -252,8 +252,9 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @return The number of tokens allowed to be spent (-1 means infinite)
      */
     function allowance(address owner, address spender)
-        external override
+        external
         view
+        override
         returns (uint256)
     {
         return transferAllowances[owner][spender];
@@ -264,7 +265,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @param owner The address of the account to query
      * @return The number of tokens owned by `owner`
      */
-    function balanceOf(address owner) external override view returns (uint256) {
+    function balanceOf(address owner) external view override returns (uint256) {
         return accountTokens[owner];
     }
 
@@ -274,7 +275,11 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @param owner The address of the account to query
      * @return The amount of underlying owned by `owner`
      */
-    function balanceOfUnderlying(address owner) external override returns (uint256) {
+    function balanceOfUnderlying(address owner)
+        external
+        override
+        returns (uint256)
+    {
         Exp memory exchangeRate = Exp({mantissa: exchangeRateCurrent()});
         (MathError mErr, uint256 balance) = mulScalarTruncate(
             exchangeRate,
@@ -291,8 +296,9 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @return (possible error, token balance, borrow balance, exchange rate mantissa)
      */
     function getAccountSnapshot(address account)
-        external override
+        external
         view
+        override
         returns (
             uint256,
             uint256,
@@ -336,7 +342,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @notice Returns the current per-timestamp borrow interest rate for this oToken
      * @return The borrow interest rate per timestmp, scaled by 1e18
      */
-    function borrowRatePerTimestamp() external override view returns (uint256) {
+    function borrowRatePerTimestamp() external view override returns (uint256) {
         return
             interestRateModel.getBorrowRate(
                 getCashPrior(),
@@ -349,7 +355,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @notice Returns the current per-timestamp supply interest rate for this oToken
      * @return The supply interest rate per timestmp, scaled by 1e18
      */
-    function supplyRatePerTimestamp() external override view returns (uint256) {
+    function supplyRatePerTimestamp() external view override returns (uint256) {
         return
             interestRateModel.getSupplyRate(
                 getCashPrior(),
@@ -363,7 +369,12 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @notice Returns the current total borrows plus accrued interest
      * @return The total borrows with interest
      */
-    function totalBorrowsCurrent() external override nonReentrant returns (uint256) {
+    function totalBorrowsCurrent()
+        external
+        override
+        nonReentrant
+        returns (uint256)
+    {
         require(
             accrueInterest() == uint256(Error.NO_ERROR),
             "accrue interest failed"
@@ -377,7 +388,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @return The calculated balance
      */
     function borrowBalanceCurrent(address account)
-        external override
+        external
+        override
         nonReentrant
         returns (uint256)
     {
@@ -394,15 +406,13 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @return The calculated balance
      */
     function borrowBalanceStored(address account)
-        public override
+        public
         view
+        override
         returns (uint256)
     {
         (MathError err, uint256 result) = borrowBalanceStoredInternal(account);
-        require(
-            err == MathError.NO_ERROR,
-            "borrowBalanceStored failed"
-        );
+        require(err == MathError.NO_ERROR, "borrowBalanceStored failed");
         return result;
     }
 
@@ -457,7 +467,12 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @notice Accrue interest then return the up-to-date exchange rate
      * @return Calculated exchange rate scaled by 1e18
      */
-    function exchangeRateCurrent() public override nonReentrant returns (uint256) {
+    function exchangeRateCurrent()
+        public
+        override
+        nonReentrant
+        returns (uint256)
+    {
         require(
             accrueInterest() == uint256(Error.NO_ERROR),
             "accrue interest failed"
@@ -470,12 +485,9 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @dev This function does not accrue interest before calculating the exchange rate
      * @return Calculated exchange rate scaled by 1e18
      */
-    function exchangeRateStored() public override view returns (uint256) {
+    function exchangeRateStored() public view override returns (uint256) {
         (MathError err, uint256 result) = exchangeRateStoredInternal();
-        require(
-            err == MathError.NO_ERROR,
-            "exchangeRateStored failed"
-        );
+        require(err == MathError.NO_ERROR, "exchangeRateStored failed");
         return result;
     }
 
@@ -532,7 +544,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @notice Get cash balance of this oToken in the underlying asset
      * @return The quantity of underlying asset owned by this contract
      */
-    function getCash() external override view returns (uint256) {
+    function getCash() external view override returns (uint256) {
         return getCashPrior();
     }
 
@@ -751,10 +763,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         MintLocalVars memory vars;
         uint256 exchangeRateMantissa;
-        (
-            vars.mathErr,
-            exchangeRateMantissa
-        ) = exchangeRateStoredInternal();
+        (vars.mathErr, exchangeRateMantissa) = exchangeRateStoredInternal();
         if (vars.mathErr != MathError.NO_ERROR) {
             return (
                 failOpaque(
@@ -801,10 +810,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
          *  accountTokensNew = accountTokens[minter] + mintTokens
          */
         uint256 totalSupplyNew;
-        (vars.mathErr, totalSupplyNew) = addUInt(
-            totalSupply,
-            mintTokens
-        );
+        (vars.mathErr, totalSupplyNew) = addUInt(totalSupply, mintTokens);
         require(
             vars.mathErr == MathError.NO_ERROR,
             "MINT_NEW_TOTAL_SUPPLY_FAILED"
@@ -832,7 +838,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         /* We emit a Mint event, and a Transfer event */
         emit Mint(minter, actualMintAmount, mintTokens);
-        emit Transfer(address(this), minter, mintTokens);
+        emit Transfer(address(0), minter, mintTokens);
 
         /* We call the defense hook */
         // unused function
@@ -934,7 +940,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
              *  redeemTokens = redeemTokensIn
              *  redeemAmount = redeemTokensIn x exchangeRateCurrent
              */
-            if (redeemTokensIn == type(uint256).max) {
+            if (redeemTokensIn >= accountTokens[redeemer]) {
                 vars.redeemTokens = accountTokens[redeemer];
             } else {
                 vars.redeemTokens = redeemTokensIn;
@@ -1034,7 +1040,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
                     uint256(vars.mathErr)
                 );
         }
-
+        if(vars.redeemTokens > accountTokens[redeemer]) 
+            vars.redeemTokens = accountTokens[redeemer];
         (vars.mathErr, vars.accountTokensNew) = subUInt(
             accountTokens[redeemer],
             vars.redeemTokens
@@ -1089,7 +1096,6 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
          *  doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
          */
         doTransferOut(redeemer, vars.redeemAmount);
-
 
         return uint256(Error.NO_ERROR);
     }
@@ -1166,9 +1172,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
          *  totalBorrowsNew = totalBorrows + borrowAmount
          */
         uint256 _accountBorrows;
-        (mathErr, _accountBorrows) = borrowBalanceStoredInternal(
-            borrower
-        );
+        (mathErr, _accountBorrows) = borrowBalanceStoredInternal(borrower);
         if (mathErr != MathError.NO_ERROR) {
             return
                 failOpaque(
@@ -1180,10 +1184,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         uint256 oldBorrowedBalance = _accountBorrows;
 
         uint256 accountBorrowsNew;
-        (mathErr, accountBorrowsNew) = addUInt(
-            _accountBorrows,
-            borrowAmount
-        );
+        (mathErr, accountBorrowsNew) = addUInt(_accountBorrows, borrowAmount);
         if (mathErr != MathError.NO_ERROR) {
             return
                 failOpaque(
@@ -1195,10 +1196,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         }
 
         uint256 totalBorrowsNew;
-        (mathErr, totalBorrowsNew) = addUInt(
-            totalBorrows,
-            borrowAmount
-        );
+        (mathErr, totalBorrowsNew) = addUInt(totalBorrows, borrowAmount);
         if (mathErr != MathError.NO_ERROR) {
             return
                 failOpaque(
@@ -1218,24 +1216,19 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         totalBorrows = totalBorrowsNew;
 
         /* We emit a Borrow event */
-        emit Borrow(
-            borrower,
-            borrowAmount,
-            accountBorrowsNew,
-            totalBorrowsNew
-        );
+        emit Borrow(borrower, borrowAmount, accountBorrowsNew, totalBorrowsNew);
 
         _updateBoostBorrowBalances(
             borrower,
             oldBorrowedBalance,
-            borrowBalanceStored(borrower)
+            accountBorrowsNew
         );
 
         /* We call the defense hook */
         // unused function
         // comptroller.borrowVerify(address(this), borrower, borrowAmount);
 
-         /*
+        /*
          * We invoke doTransferOut for the borrower and the borrowAmount.
          *  Note: The oToken must handle variations between ERC-20 and MATIC underlying.
          *  On success, the oToken borrowAmount less of cash.
@@ -1371,8 +1364,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
             );
         }
 
-        /* If repayAmount == -1, repayAmount = accountBorrows */
-        if (repayAmount == type(uint256).max) {
+        /* If repayAmount >= accountBorrows, repayAmount = accountBorrows */
+        if (repayAmount >= vars.accountBorrows) {
             vars.repayAmount = vars.accountBorrows;
         } else {
             vars.repayAmount = repayAmount;
@@ -1430,7 +1423,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         _updateBoostBorrowBalances(
             borrower,
             oldBorrowedBalance,
-            borrowBalanceStored(borrower)
+            vars.accountBorrowsNew
         );
 
         /* We call the defense hook */
@@ -1744,7 +1737,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
             seizeTokens,
             Exp({mantissa: protocolSeizeShareMantissa})
         );
-        
+
         vars.liquidatorSeizeTokens = seizeTokens - vars.protocolSeizeTokens;
 
         (
@@ -1779,9 +1772,17 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         // (No safe failures beyond this point)
 
         /* We write the previously calculated values into storage */
-        _updateBoostSupplyBalances(borrower, accountTokens[borrower], vars.borrowerTokensNew);
-        _updateBoostSupplyBalances(liquidator, accountTokens[liquidator], vars.liquidatorTokensNew);
-        
+        _updateBoostSupplyBalances(
+            borrower,
+            accountTokens[borrower],
+            vars.borrowerTokensNew
+        );
+        _updateBoostSupplyBalances(
+            liquidator,
+            accountTokens[liquidator],
+            vars.liquidatorTokensNew
+        );
+
         totalReserves = vars.totalReservesNew;
         totalSupply = vars.totalSupplyNew;
         accountTokens[borrower] = vars.borrowerTokensNew;
@@ -1804,11 +1805,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
     }
 
     /*** Admin Functions ***/
-    function unauthorized(FailureInfo info) internal returns(uint) {
-        return fail(
-            Error.UNAUTHORIZED,
-            info
-        );
+    function unauthorized(FailureInfo info) internal returns (uint) {
+        return fail(Error.UNAUTHORIZED, info);
     }
 
     function setAdmin(address payable _admin) public {
@@ -1825,7 +1823,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function _setPendingAdmin(address payable newPendingAdmin)
-        external override
+        external
+        override
         returns (uint256)
     {
         // Check caller = admin
@@ -1878,7 +1877,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function _setComptroller(IComptroller newComptroller)
-        public override
+        public
+        override
         returns (uint256)
     {
         // Check caller is admin
@@ -1905,7 +1905,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function _setReserveFactor(uint256 newReserveFactorMantissa)
-        external override
+        external
+        override
         nonReentrant
         returns (uint256)
     {
@@ -2048,7 +2049,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function _reduceReserves(uint256 reduceAmount)
-        external override
+        external
+        override
         nonReentrant
         returns (uint256)
     {
@@ -2113,7 +2115,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         // We checked reduceAmount <= totalReserves above, so this should never revert.
         totalReservesNew = totalReserves - reduceAmount;
-        
+
         // Store reserves[n+1] = reserves[n] - reduceAmount
         totalReserves = totalReservesNew;
 
@@ -2132,7 +2134,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function _setInterestRateModel(IInterestRateModel newInterestRateModel)
-        public override
+        public
+        override
         returns (uint256)
     {
         uint256 error = accrueInterest();
@@ -2163,7 +2166,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         // Check caller is admin
         if (msg.sender != admin) {
-            return unauthorized(FailureInfo.SET_INTEREST_RATE_MODEL_OWNER_CHECK);
+            return
+                unauthorized(FailureInfo.SET_INTEREST_RATE_MODEL_OWNER_CHECK);
         }
 
         // We fail gracefully unless market's block timestamp equals current block timestamp
@@ -2203,7 +2207,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function _setProtocolSeizeShare(uint256 newProtocolSeizeShareMantissa)
-        external override
+        external
+        override
         nonReentrant
         returns (uint256)
     {
@@ -2235,7 +2240,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         // Check caller is admin
         if (msg.sender != admin) {
-            return unauthorized(FailureInfo.SET_PROTOCOL_SEIZE_SHARE_OWNER_CHECK);
+            return
+                unauthorized(FailureInfo.SET_PROTOCOL_SEIZE_SHARE_OWNER_CHECK);
         }
 
         // We fail gracefully unless market's block timestamp equals current block timestamp
@@ -2269,14 +2275,15 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @dev This excludes the value of the current message, if any
      * @return The quantity of underlying owned by this contract
      */
-    function getCashPrior() internal virtual view returns (uint256);
+    function getCashPrior() internal view virtual returns (uint256);
 
     /**
      * @dev Performs a transfer in, reverting upon failure. Returns the amount actually transferred to the protocol, in case of a fee.
      *  This may revert due to insufficient balance or insufficient allowance.
      */
     function doTransferIn(address from, uint256 amount)
-        internal virtual
+        internal
+        virtual
         returns (uint256);
 
     /**
@@ -2296,5 +2303,31 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         _notEntered = false;
         _;
         _notEntered = true; // get a gas-refund post-Istanbul
+    }
+
+    function requireNoError(uint256 errCode, string memory message)
+        internal
+        pure
+    {
+        unchecked {
+            if (errCode == uint256(Error.NO_ERROR)) {
+                return;
+            }
+
+            bytes memory fullMessage = new bytes(bytes(message).length + 5);
+            uint256 i;
+
+            for (i = 0; i < bytes(message).length; i++) {
+                fullMessage[i] = bytes(message)[i];
+            }
+
+            fullMessage[i + 0] = bytes1(uint8(32));
+            fullMessage[i + 1] = bytes1(uint8(40));
+            fullMessage[i + 2] = bytes1(uint8(48 + (errCode / 10)));
+            fullMessage[i + 3] = bytes1(uint8(48 + (errCode % 10)));
+            fullMessage[i + 4] = bytes1(uint8(41));
+
+            require(errCode == uint256(Error.NO_ERROR), string(fullMessage));
+        }
     }
 }

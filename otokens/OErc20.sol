@@ -55,64 +55,60 @@ contract OErc20 is OToken, OErc20Storage {
      * @notice Sender supplies assets into the market and receives oTokens in exchange
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
      * @param mintAmount The amount of the underlying asset to supply
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+     * @dev Reverts upon any failure
      */
-    function mint(uint256 mintAmount) external override returns (uint256) {
+    function mint(uint256 mintAmount) external override {
         (uint256 err, ) = mintInternal(mintAmount);
-        return err;
+        requireNoError(err, "mint failed");
     }
 
     /**
      * @notice Sender redeems oTokens in exchange for the underlying asset
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
      * @param redeemTokens The number of oTokens to redeem into underlying
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function redeem(uint256 redeemTokens) external override returns (uint256) {
-        return redeemInternal(redeemTokens);
+    function redeem(uint256 redeemTokens) external override {
+        redeemInternal(redeemTokens);
     }
 
     /**
      * @notice Sender redeems oTokens in exchange for a specified amount of underlying asset
      * @dev Accrues interest whether or not the operation succeeds, unless reverted
      * @param redeemAmount The amount of underlying to redeem
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function redeemUnderlying(uint256 redeemAmount) external override returns (uint256) {
-        return redeemUnderlyingInternal(redeemAmount);
+    function redeemUnderlying(uint256 redeemAmount) external override{
+        redeemUnderlyingInternal(redeemAmount);
     }
 
     /**
      * @notice Sender borrows assets from the protocol to their own address
      * @param borrowAmount The amount of the underlying asset to borrow
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
-    function borrow(uint256 borrowAmount) external override returns (uint256) {
-        return borrowInternal(borrowAmount);
+    function borrow(uint256 borrowAmount) external override {
+        borrowInternal(borrowAmount);
     }
 
     /**
      * @notice Sender repays their own borrow
      * @param repayAmount The amount to repay
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+     * @dev Reverts upon any failure
      */
-    function repayBorrow(uint256 repayAmount) external override returns (uint256) {
+    function repayBorrow(uint256 repayAmount) external override {
         (uint256 err, ) = repayBorrowInternal(repayAmount);
-        return err;
+        requireNoError(err, "repayBorrow failed");
     }
 
     /**
      * @notice Sender repays a borrow belonging to borrower
      * @param borrower the account with the debt being payed off
      * @param repayAmount The amount to repay
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+     * @dev Reverts upon any failure
      */
     function repayBorrowBehalf(address borrower, uint256 repayAmount)
         external override
-        returns (uint256)
     {
         (uint256 err, ) = repayBorrowBehalfInternal(borrower, repayAmount);
-        return err;
+        requireNoError(err, "repayBorrowBehalf failed");
     }
 
     /**
@@ -121,19 +117,19 @@ contract OErc20 is OToken, OErc20Storage {
      * @param borrower The borrower of this oToken to be liquidated
      * @param repayAmount The amount of the underlying borrowed asset to repay
      * @param oTokenCollateral The market in which to seize collateral from the borrower
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+     * @dev Reverts upon any failure
      */
     function liquidateBorrow(
         address borrower,
         uint256 repayAmount,
         IOToken oTokenCollateral
-    ) external override returns (uint256) {
+    ) external override {
         (uint256 err, ) = liquidateBorrowInternal(
             borrower,
             repayAmount,
             oTokenCollateral
         );
-        return err;
+        requireNoError(err, "liquidateBorrow failed");
     }
 
     /**

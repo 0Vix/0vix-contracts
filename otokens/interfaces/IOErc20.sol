@@ -8,13 +8,13 @@ interface IOErc20 {
 
     /*** User Interface ***/
 
-    function mint(uint mintAmount) external returns (uint);
-    function redeem(uint redeemTokens) external returns (uint);
-    function redeemUnderlying(uint redeemAmount) external returns (uint);
-    function borrow(uint borrowAmount) external returns (uint);
-    function repayBorrow(uint repayAmount) external returns (uint);
-    function repayBorrowBehalf(address borrower, uint repayAmount) external returns (uint);
-    function liquidateBorrow(address borrower, uint repayAmount, IOToken oTokenCollateral) external returns (uint);
+    function mint(uint mintAmount) external;
+    function redeem(uint redeemTokens) external;
+    function redeemUnderlying(uint redeemAmount) external;
+    function borrow(uint borrowAmount) external;
+    function repayBorrow(uint repayAmount) external;
+    function repayBorrowBehalf(address borrower, uint repayAmount) external;
+    function liquidateBorrow(address borrower, uint repayAmount, IOToken oTokenCollateral) external;
     function sweepToken(IEIP20NonStandard token) external;
 
     function underlying() external view returns(address);
