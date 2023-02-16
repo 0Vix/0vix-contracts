@@ -40,6 +40,10 @@ contract BoostManager is Ownable {
         address _owner
     ) external {
         require(!init, "contract already initialized");
+        require(address(ve) != address(0)
+            && address(_comptroller) != address(0)
+            && address(_owner) != address(0),
+         "no zero address allowed");
         init = true;
         veOVIX = ve;
         comptroller = _comptroller;
@@ -64,6 +68,7 @@ contract BoostManager is Ownable {
         onlyAuthorized
         returns (bool)
     {
+        require(user != address(0), "no zero address allowed");
         IOToken[] memory markets = comptroller.getAllMarkets();
 
         veBalances[user] = veOVIX.balanceOf(user);
@@ -71,7 +76,7 @@ contract BoostManager is Ownable {
             _updateBoostBasisPerMarket(address(markets[i]), user);
         }
 
-        return veBalances[user] == 0 ? false : true;
+        return veBalances[user] != 0;
     }
 
     function _updateBoostBasisPerMarket(address market, address user) internal {
@@ -134,6 +139,7 @@ contract BoostManager is Ownable {
         uint256 oldBalance, // todo: removing oldbalance: needs to be updated in oToken too. keep it until updating the oToken is necessary
         uint256 newBalance
     ) external onlyAuthorized {
+        require(user != address(0) && market != address(0), "no zero address allowed");
         _updateBoostBalance(
             market,
             user,
@@ -149,6 +155,7 @@ contract BoostManager is Ownable {
         uint256 oldBalance, // todo: removing oldbalance: needs to be updated in oToken too. keep it until updating the oToken is necessary
         uint256 newBalance
     ) external onlyAuthorized {
+        require(user != address(0) && market != address(0), "no zero address allowed");
         _updateBoostBalance(
             market,
             user,
@@ -300,6 +307,7 @@ contract BoostManager is Ownable {
     }
 
     function setAuthorized(address addr, bool flag) external onlyOwner {
+        require(addr != address(0), "no zero address allowed");
         authorized[addr] = flag;
         emit AuthorizedUpdated(addr, flag);
     }
@@ -309,6 +317,8 @@ contract BoostManager is Ownable {
     }
 
     function setVeOVIX(IERC20 ve) external onlyOwner {
+        require(address(ve) != address(0), "no zero address allowed");
+        require(address(veOVIX) == address(0), "address can only be set once");
         veOVIX = ve;
         emit VeOVIXUpdated(veOVIX);
     }

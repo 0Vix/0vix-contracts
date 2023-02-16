@@ -129,9 +129,9 @@ contract Unitroller is UnitrollerAdminStorage, ComptrollerErrorReporter {
     }
 
     function setAdmin(address _admin) public {
-      if(msg.sender != admin) revert("Unauthorized");
+        require(msg.sender == admin, "Unauthorized");
         address oldAdmin = admin;
-        admin = _admin;
+        pendingAdmin = _admin;
         emit NewAdmin(oldAdmin, admin);
     }
 

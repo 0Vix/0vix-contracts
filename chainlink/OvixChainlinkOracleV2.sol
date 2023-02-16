@@ -4,11 +4,9 @@ pragma solidity 0.8.4;
 import "../PriceOracle.sol";
 import "../otokens/OErc20.sol";
 import "../otokens/interfaces/IEIP20.sol";
-import "../libraries/SafeMath.sol";
 import "./interfaces/IAggregatorV2V3.sol";
 
 contract OvixChainlinkOracleV2 is PriceOracle {
-    using SafeMath for uint;
 
     address public admin;
     uint256 public validPeriod;
@@ -19,7 +17,7 @@ contract OvixChainlinkOracleV2 is PriceOracle {
         uint256 updatedAt;
     }
 
-    mapping(IAggregatorV2V3 => uint256) heartbeats;
+    mapping(IAggregatorV2V3 => uint256) public heartbeats;
     mapping(address => IAggregatorV2V3) internal feeds;
     mapping(address => PriceData) internal prices;
 
@@ -37,7 +35,7 @@ contract OvixChainlinkOracleV2 is PriceOracle {
     constructor(address _oMatic) {
         admin = msg.sender;
         validPeriod = 300; // 5 minutes
-        setOMatic(_oMatic);
+        _setOMatic(_oMatic);
     }
 
     function getUnderlyingPrice(IOToken oToken)
@@ -66,10 +64,10 @@ contract OvixChainlinkOracleV2 is PriceOracle {
 
         require(price > 0, "bad price");
 
-        uint decimalDelta = uint(18).sub(uint(token.decimals()));
+        uint decimalDelta = uint(18) - (uint(token.decimals()));
         // Ensure that we don't multiply the result by 0
         if (decimalDelta > 0) {
-            return price.mul(10**decimalDelta);
+            return price*(10**decimalDelta);
         } else {
             return price;
         }
@@ -81,18 +79,18 @@ contract OvixChainlinkOracleV2 is PriceOracle {
         returns (uint)
     {
         // Chainlink USD-denominated feeds store answers at 8 decimals
-        uint decimalDelta = uint(18).sub(feed.decimals());
+        uint decimalDelta = uint(18)-(feed.decimals());
 
         (, int256 answer, , uint256 updatedAt, ) = feed.latestRoundData();
         require(updatedAt > 0, "Round not complete");
         require(
-            block.timestamp <= updatedAt.add((heartbeats[feed] * 15) / 10),
+            block.timestamp <= updatedAt+((heartbeats[feed] * 15) / 10),
             "Update time (heartbeat) exceeded"
         );
 
         // Ensure that we don't multiply the result by 0
         if (decimalDelta > 0) {
-            return uint(answer).mul(10**decimalDelta);
+            return uint(answer)*(10**decimalDelta);
         } else {
             return uint(answer);
         }
@@ -142,8 +140,9 @@ contract OvixChainlinkOracleV2 is PriceOracle {
         external
         onlyAdmin
     {
-        heartbeats[feeds[oToken]] = heartbeat;
-        emit HeartbeatSet(address(feeds[oToken]), heartbeat);
+        IAggregatorV2V3 feed = feeds[oToken];
+        heartbeats[feed] = heartbeat;
+        emit HeartbeatSet(address(feed), heartbeat);
     }
 
     function getFeed(address oToken) public view returns (IAggregatorV2V3) {
@@ -152,16 +151,19 @@ contract OvixChainlinkOracleV2 is PriceOracle {
 
     function setValidPeriod(uint256 period) external onlyAdmin {
         validPeriod = period;
+        emit ValidPeriodSet(period);
     }
 
     function setAdmin(address newAdmin) external onlyAdmin {
-        address oldAdmin = admin;
-        admin = newAdmin;
-
-        emit NewAdmin(oldAdmin, newAdmin);
+        emit NewAdmin(admin, newAdmin);
+        admin = newAdmin;        
     }
 
-    function setOMatic(address _oMatic) public onlyAdmin {
+    function setOMatic(address _oMatic) external onlyAdmin {
+        _setOMatic(_oMatic);
+    }
+
+    function _setOMatic(address _oMatic) internal {
         oMatic = _oMatic;
     }
 

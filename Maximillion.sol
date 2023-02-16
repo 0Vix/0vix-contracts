@@ -2,6 +2,7 @@
 pragma solidity 0.8.4;
 
 import "./otokens/OMatic.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 /**
  * @title 0VIX's Maximillion Contract
@@ -11,7 +12,7 @@ contract Maximillion {
     /**
      * @notice The default oMatic market to repay in
      */
-    OMatic public oMatic;
+    OMatic public immutable oMatic;
 
     /**
      * @notice Construct a Maximillion to repay max in a OMatic market
@@ -40,7 +41,7 @@ contract Maximillion {
         uint borrows = oMatic_.borrowBalanceCurrent(borrower);
         if (received > borrows) {
             oMatic_.repayBorrowBehalf{value: borrows}(borrower);
-            payable(msg.sender).transfer(received - borrows);
+            Address.sendValue(payable(msg.sender), received - borrows);
         } else {
             oMatic_.repayBorrowBehalf{value: received}(borrower);
         }

@@ -41,10 +41,12 @@ contract VoteController {
     uint256 public constant MULTIPLIER = 10**18;
 
     // everywhere in the contract percentages should have hundredths precision
-    uint256 public constant HUNDRED_PERCENT = 10000;
+    uint256 public constant HUNDRED_PERCENT = 100_00;
+
+    uint256 public constant CHECKIN_ITERATIONS = 500;
 
     // emissions for the votable markets
-    uint256 public totalEmissions = 0; // in wei
+    uint256 public totalEmissions; // in wei
 
     uint256 public votablePercentage; // in %, hundredths precision
 
@@ -85,9 +87,6 @@ contract VoteController {
     address public futureAdmin;
     // Voting escrow
     address public votingEscrow;
-
-    // track the votable 0vix markets
-    mapping(address => bool) private isVotable;
 
     // user -> marketAddr -> VotedSlope
     mapping(address => mapping(address => VotedSlope)) public voteUserSlopes;
@@ -169,8 +168,6 @@ contract VoteController {
         _;
     }
 
-    constructor() {}
-
     function initialize(
         address _votingEscrow,
         IComptroller _comptroller,
@@ -178,9 +175,9 @@ contract VoteController {
         uint256 _totalEmissions
     ) external {
         require(!initialized, "contract already initialized");
-        require(_votingEscrow != address(0));
-        require(address(_comptroller) != address(0));
-        require(address(_boostManager) != address(0));
+        require(_votingEscrow != address(0), "ve address cannot be 0");
+        require(address(_comptroller) != address(0), "comptroller address cannot be 0");
+        require(address(_boostManager) != address(0), "boostmanager address cannot be 0");
 
         initialized = true;
         comp = _comptroller;
@@ -226,7 +223,7 @@ contract VoteController {
 
         Point memory pt = pointsTotal[t];
 
-        for (uint256 i = 0; i < 500; i++) {
+        for (uint256 i = 0; i < CHECKIN_ITERATIONS; i++) {
             if (t > block.timestamp) break;
 
             t += PERIOD;
@@ -260,7 +257,7 @@ contract VoteController {
         if (t == 0) return 0;
 
         Point memory pt = pointsWeight[marketAddr][t];
-        for (uint256 i = 0; i < 500; i++) {
+        for (uint256 i = 0; i < CHECKIN_ITERATIONS; i++) {
             if (t > block.timestamp) break;
 
             t += PERIOD;
@@ -287,9 +284,8 @@ contract VoteController {
      * @param addr Market address
      */
     function addMarket(address addr) external onlyAdmin {
-        require(!isVotable[addr], "Cannot add the same market twice");
+        require(!markets.contains(addr), "Cannot add the same market twice");
         require(comp.isMarket(addr), "address is not an 0vix market");
-        isVotable[addr] = true;
 
         markets.add(addr);
 
@@ -308,8 +304,7 @@ contract VoteController {
      * @param addr Market address
      */
     function removeMarket(address addr) external onlyAdmin {
-        require(isVotable[addr], "Market doesn't exist");
-        isVotable[addr] = false;
+        require(markets.contains(addr), "Market doesn't exist");
 
         markets.remove(addr);
         
@@ -379,11 +374,13 @@ contract VoteController {
     function setFixedRewardWeights(Market[] memory _markets) public onlyAdmin {
         uint256 sumWeights = 0;
 
-        for (uint256 i = 0; i < markets.length(); i++) {
+        uint256 marketCount = markets.length();
+        for (uint256 i = 0; i < marketCount; i++) {
             sumWeights += fixedRewardWeights[markets.at(i)];
         }
 
-        for (uint256 i = 0; i < _markets.length; i++) {
+        uint256 _marketCount = _markets.length;
+        for (uint256 i = 0; i < _marketCount; i++) {
             require(
                 markets.contains(_markets[i].market),
                 "Market is not in the list"
@@ -548,7 +545,7 @@ contract VoteController {
             "Cannot vote so often"
         );
 
-        require(isVotable[_marketAddr], "Market is not votable");
+        require(markets.contains(_marketAddr), "Market is not votable");
         // Prepare slopes and biases in memory
         VotedSlope memory oldSlope = voteUserSlopes[msg.sender][_marketAddr];
         uint256 oldBias;
@@ -697,7 +694,8 @@ contract VoteController {
             HUNDRED_PERCENT;
         uint256 fixedAmount = totalEmissions - votableAmount;
 
-        for (uint256 i = 0; i < markets.length(); i++) {
+        uint256 marketCount = markets.length();
+        for (uint256 i = 0; i < marketCount; i++) {
             // todo: check if all markets have (fixed-)weights
             address addr = markets.at(i);
             uint256 relWeight = _marketRelativeWeight(addr, block.timestamp);

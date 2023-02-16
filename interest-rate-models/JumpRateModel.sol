@@ -2,43 +2,38 @@
 pragma solidity 0.8.4;
 
 import "./interfaces/IInterestRateModel.sol";
-import "../libraries/SafeMath.sol";
 
 /**
-  * @title 0VIX's JumpRateModel Contract
-  * @author 0VIX
-  */
+ * @title 0VIX's JumpRateModel Contract
+ * @author 0VIX
+ */
 contract JumpRateModel is IInterestRateModel {
-    using SafeMath for uint;
-
-    event NewInterestParams(uint baseRatePerTimestamp, uint multiplierPerTimestamp, uint jumpMultiplierPerTimestamp, uint kink);
-
     bool public constant override isInterestRateModel = true;
 
     /**
      * @notice The approximate number of timestamps per year that is assumed by the interest rate model
      */
-    uint public constant timestampsPerYear = 31536000;
+    uint256 public constant timestampsPerYear = 31536000;
 
     /**
      * @notice The multiplier of utilization rate that gives the slope of the interest rate
      */
-    uint public multiplierPerTimestamp;
+    uint256 public immutable multiplierPerTimestamp;
 
     /**
      * @notice The base interest rate which is the y-intercept when utilization rate is 0
      */
-    uint public baseRatePerTimestamp;
+    uint256 public immutable baseRatePerTimestamp;
 
     /**
      * @notice The multiplierPerTimestamp after hitting a specified utilization point
      */
-    uint public jumpMultiplierPerTimestamp;
+    uint256 public immutable jumpMultiplierPerTimestamp;
 
     /**
      * @notice The utilization point at which the jump multiplier is applied
      */
-    uint public kink;
+    uint256 public immutable kink;
 
     /**
      * @notice Construct an interest rate model
@@ -47,13 +42,25 @@ contract JumpRateModel is IInterestRateModel {
      * @param jumpMultiplierPerYear The multiplierPerTimestamp after hitting a specified utilization point
      * @param kink_ The utilization point at which the jump multiplier is applied
      */
-    constructor(uint baseRatePerYear, uint multiplierPerYear, uint jumpMultiplierPerYear, uint kink_) {
-        baseRatePerTimestamp = baseRatePerYear.mul(1e18).div(timestampsPerYear).div(1e18);
-        multiplierPerTimestamp = multiplierPerYear.mul(1e18).div(timestampsPerYear).div(1e18);
-        jumpMultiplierPerTimestamp = jumpMultiplierPerYear.mul(1e18).div(timestampsPerYear).div(1e18);
+    constructor(
+        uint256 baseRatePerYear,
+        uint256 multiplierPerYear,
+        uint256 jumpMultiplierPerYear,
+        uint256 kink_
+    ) {
+        baseRatePerTimestamp =
+            (baseRatePerYear * 1e18) /
+            timestampsPerYear /
+            1e18;
+        multiplierPerTimestamp =
+            (multiplierPerYear * 1e18) /
+            timestampsPerYear /
+            1e18;
+        jumpMultiplierPerTimestamp =
+            (jumpMultiplierPerYear * 1e18) /
+            timestampsPerYear /
+            1e18;
         kink = kink_;
-
-        emit NewInterestParams(baseRatePerTimestamp, multiplierPerTimestamp, jumpMultiplierPerTimestamp, kink);
     }
 
     /**
@@ -63,13 +70,17 @@ contract JumpRateModel is IInterestRateModel {
      * @param reserves The amount of reserves in the market (currently unused)
      * @return The utilization rate as a mantissa between [0, 1e18]
      */
-    function utilizationRate(uint cash, uint borrows, uint reserves) public pure returns (uint) {
+    function utilizationRate(
+        uint256 cash,
+        uint256 borrows,
+        uint256 reserves
+    ) public pure returns (uint256) {
         // Utilization rate is 0 when there are no borrows
         if (borrows == 0) {
             return 0;
         }
 
-        return borrows.mul(1e18).div(cash.add(borrows).sub(reserves));
+        return (borrows * 1e18) / (cash + borrows - reserves);
     }
 
     /**
@@ -79,15 +90,22 @@ contract JumpRateModel is IInterestRateModel {
      * @param reserves The amount of reserves in the market
      * @return The borrow rate percentage per timestmp as a mantissa (scaled by 1e18)
      */
-    function getBorrowRate(uint cash, uint borrows, uint reserves) public view override returns (uint) {
-        uint util = utilizationRate(cash, borrows, reserves);
+    function getBorrowRate(
+        uint256 cash,
+        uint256 borrows,
+        uint256 reserves
+    ) public view override returns (uint256) {
+        uint256 util = utilizationRate(cash, borrows, reserves);
 
         if (util <= kink) {
-            return util.mul(multiplierPerTimestamp).div(1e18).add(baseRatePerTimestamp);
+            return
+                ((util * multiplierPerTimestamp) / 1e18) + baseRatePerTimestamp;
         } else {
-            uint normalRate = kink.mul(multiplierPerTimestamp).div(1e18).add(baseRatePerTimestamp);
-            uint excessUtil = util.sub(kink);
-            return excessUtil.mul(jumpMultiplierPerTimestamp).div(1e18).add(normalRate);
+            uint256 normalRate = ((kink * multiplierPerTimestamp) / 1e18) +
+                baseRatePerTimestamp;
+            uint256 excessUtil = util - kink;
+            return
+                ((excessUtil * jumpMultiplierPerTimestamp) / 1e18) + normalRate;
         }
     }
 
@@ -99,10 +117,15 @@ contract JumpRateModel is IInterestRateModel {
      * @param reserveFactorMantissa The current reserve factor for the market
      * @return The supply rate percentage per timestmp as a mantissa (scaled by 1e18)
      */
-    function getSupplyRate(uint cash, uint borrows, uint reserves, uint reserveFactorMantissa) public view override returns (uint) {
-        uint oneMinusReserveFactor = uint(1e18).sub(reserveFactorMantissa);
-        uint borrowRate = getBorrowRate(cash, borrows, reserves);
-        uint rateToPool = borrowRate.mul(oneMinusReserveFactor).div(1e18);
-        return utilizationRate(cash, borrows, reserves).mul(rateToPool).div(1e18);
+    function getSupplyRate(
+        uint256 cash,
+        uint256 borrows,
+        uint256 reserves,
+        uint256 reserveFactorMantissa
+    ) public view override returns (uint256) {
+        uint256 oneMinusReserveFactor = uint256(1e18) - reserveFactorMantissa;
+        uint256 borrowRate = getBorrowRate(cash, borrows, reserves);
+        uint256 rateToPool = (borrowRate * oneMinusReserveFactor) / 1e18;
+        return (utilizationRate(cash, borrows, reserves) * rateToPool) / 1e18;
     }
 }

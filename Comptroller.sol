@@ -120,6 +120,11 @@ contract Comptroller is
     /// @notice Emitted when VIX rewards are being claimed for a user
     event VixClaimed(address recipient, uint256 amount);
 
+    /// @notice Emitted when VIX address changes
+    event VixAddressSet(address vix);
+    /// @notice Emitted when boostmanager address changes
+    event BoostManagerSet(address boostmanager);
+
     bool public constant override isComptroller = true;
 
     /// @notice The initial Reward index for a market
@@ -134,7 +139,7 @@ contract Comptroller is
     // No collateralFactorMantissa may exceed this value
     uint256 internal constant collateralFactorMaxMantissa = 0.9e18; // 0.9
 
-    address vixAddress;
+    address public vixAddress;
     address public rewardUpdater;
 
     modifier onlyAdmin() {
@@ -336,6 +341,8 @@ contract Comptroller is
             return uint256(Error.MARKET_NOT_LISTED);
         }
 
+        // Sets an asset automatically as collateral if the user has no
+        // oToken (on first deposit) and if the asset allows auto-collateralization
         if (
             IOToken(oToken).balanceOf(minter) == 0 &&
             markets[oToken].autoCollaterize
@@ -1261,6 +1268,10 @@ contract Comptroller is
         });
 
         emit MarketAutoCollateralized(_autoCollaterize);
+        
+        for (uint i = 0; i < allMarkets.length; i ++) {
+            require(allMarkets[i] != IOToken(oToken), "market already added");
+        }
 
         allMarkets.push(oToken);
         _initializeMarket(address(oToken));
@@ -1510,14 +1521,14 @@ contract Comptroller is
         MarketState storage supplyState = supplyState[oToken];
         uint256 supplySpeed = rewardSupplySpeeds[oToken];
         uint32 timestamp = safe32(getTimestamp());
-        uint256 deltaBlocks = uint256(timestamp) -
+        uint256 deltaTimestamps = uint256(timestamp) -
             uint256(supplyState.timestamp);
-        if (deltaBlocks > 0) {
+        if (deltaTimestamps > 0) {
             if (supplySpeed > 0) {
                 uint256 supplyTokens = address(boostManager) == address(0)
                     ? IOToken(oToken).totalSupply()
                     : boostManager.boostedTotalSupply(oToken);
-                uint256 rewardAccrued = deltaBlocks * supplySpeed;
+                uint256 rewardAccrued = deltaTimestamps * supplySpeed;
                 Double memory ratio = supplyTokens > 0
                     ? fraction(rewardAccrued, supplyTokens)
                     : Double({mantissa: 0});
@@ -1541,9 +1552,9 @@ contract Comptroller is
         MarketState storage borrowState = borrowState[oToken];
         uint256 borrowSpeed = rewardBorrowSpeeds[oToken];
         uint32 timestamp = safe32(getTimestamp());
-        uint256 deltaBlocks = uint256(timestamp) -
+        uint256 deltaTimestamps = uint256(timestamp) -
             uint256(borrowState.timestamp);
-        if (deltaBlocks > 0) {
+        if (deltaTimestamps > 0) {
             if (borrowSpeed > 0) {
                 uint256 borrowAmount = div_(
                     address(boostManager) == address(0)
@@ -1551,7 +1562,7 @@ contract Comptroller is
                         : boostManager.boostedTotalBorrows(oToken),
                     marketBorrowIndex
                 );
-                uint256 rewardAccrued = deltaBlocks * borrowSpeed;
+                uint256 rewardAccrued = deltaTimestamps * borrowSpeed;
                 Double memory ratio = borrowAmount > 0
                     ? fraction(rewardAccrued, borrowAmount)
                     : Double({mantissa: 0});
@@ -1670,9 +1681,9 @@ contract Comptroller is
     function updateContributorRewards(address contributor) public {
         uint256 rewardSpeed = rewardContributorSpeeds[contributor];
         uint256 timestamp = getTimestamp();
-        uint256 deltaBlocks = timestamp - lastContributorTimestamp[contributor];
-        if (deltaBlocks > 0 && rewardSpeed > 0) {
-            uint256 newAccrued = deltaBlocks * rewardSpeed;
+        uint256 deltaTimestamps = timestamp - lastContributorTimestamp[contributor];
+        if (deltaTimestamps > 0 && rewardSpeed > 0) {
+            uint256 newAccrued = deltaTimestamps * rewardSpeed;
             uint256 contributorAccrued = rewardAccrued[contributor] +
                 newAccrued;
 
@@ -1867,7 +1878,7 @@ contract Comptroller is
     function isDeprecated(IOToken oToken) public view returns (bool) {
         return
             markets[address(oToken)].collateralFactorMantissa == 0 &&
-            guardianPaused[address(oToken)].borrow == true &&
+            guardianPaused[address(oToken)].borrow &&
             oToken.reserveFactorMantissa() == 1e18;
     }
 
@@ -1887,14 +1898,20 @@ contract Comptroller is
      * @notice Set the 0VIX token address
      */
     function setVixAddress(address newVixAddress) public onlyAdmin {
+        require(newVixAddress != address(0), "no zero address allowed");
+        require(vixAddress == address(0), "VIX already set");
         vixAddress = newVixAddress;
+        emit VixAddressSet(newVixAddress);
     }
 
     /**
      * @notice Set the booster manager address
      */
     function setBoostManager(address newBoostManager) public onlyAdmin {
+        require(newBoostManager != address(0), "no zero address allowed");
+        require(address(boostManager) == address(0), "VIX already set");
         boostManager = IBoostManager(newBoostManager);
+        emit BoostManagerSet(newBoostManager);
     }
 
     function getBoostManager() external view override returns (address) {
@@ -1902,6 +1919,7 @@ contract Comptroller is
     }
 
     function setRewardUpdater(address _rewardUpdater) public onlyAdmin {
+        require(_rewardUpdater != address(0), "no zero address allowed");
         rewardUpdater = _rewardUpdater;
         emit RewardUpdaterModified(_rewardUpdater);
     }

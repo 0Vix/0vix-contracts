@@ -158,6 +158,13 @@ contract Ovix {
             amount = safe96(rawAmount, "O::permit: amount exceeds 96 bits");
         }
 
+        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) {
+            revert("Invalid signature s");
+        }
+        if (v != 27 && v != 28) {
+            revert("Invalid signature v");
+        }
+
         bytes32 domainSeparator = keccak256(
             abi.encode(
                 DOMAIN_TYPEHASH,
@@ -460,7 +467,7 @@ contract Ovix {
         pure
         returns (uint32)
     {
-        require(n < 2**32, errorMessage);
+        require(n < type(uint32).max, errorMessage);
         return uint32(n);
     }
 
@@ -469,7 +476,7 @@ contract Ovix {
         pure
         returns (uint96)
     {
-        require(n < 2**96, errorMessage);
+        require(n < type(uint96).max, errorMessage);
         return uint96(n);
     }
 

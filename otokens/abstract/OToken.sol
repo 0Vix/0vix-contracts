@@ -1040,7 +1040,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
                     uint256(vars.mathErr)
                 );
         }
-        if(vars.redeemTokens > accountTokens[redeemer]) 
+        if (vars.redeemTokens > accountTokens[redeemer])
             vars.redeemTokens = accountTokens[redeemer];
         (vars.mathErr, vars.accountTokensNew) = subUInt(
             accountTokens[redeemer],
@@ -1831,15 +1831,11 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         if (msg.sender != admin) {
             return unauthorized(FailureInfo.SET_PENDING_ADMIN_OWNER_CHECK);
         }
-
-        // Save current value, if any, for inclusion in log
-        address oldPendingAdmin = pendingAdmin;
+        // Emit NewPendingAdmin(oldPendingAdmin, newPendingAdmin)
+        emit NewPendingAdmin(pendingAdmin, newPendingAdmin);
 
         // Store pendingAdmin with value newPendingAdmin
         pendingAdmin = newPendingAdmin;
-
-        // Emit NewPendingAdmin(oldPendingAdmin, newPendingAdmin)
-        emit NewPendingAdmin(oldPendingAdmin, newPendingAdmin);
 
         return uint256(Error.NO_ERROR);
     }
@@ -2235,9 +2231,6 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         internal
         returns (uint256)
     {
-        // Used to store old share for use in the event that is emitted on success
-        uint256 oldProtocolSeizeShareMantissa;
-
         // Check caller is admin
         if (msg.sender != admin) {
             return
@@ -2252,18 +2245,14 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
                     FailureInfo.SET_PROTOCOL_SEIZE_SHARE_FRESH_CHECK
                 );
         }
-
-        // Track the market's current protocol seize share
-        oldProtocolSeizeShareMantissa = protocolSeizeShareMantissa;
+        // Emit NewProtocolSeizeShareMantissa(oldProtocolSeizeShareMantissa, newProtocolSeizeShareMantissa)
+        emit NewProtocolSeizeShare(
+            protocolSeizeShareMantissa,
+            newProtocolSeizeShareMantissa
+        );
 
         // Set the protocol seize share to newProtocolSeizeShareMantissa
         protocolSeizeShareMantissa = newProtocolSeizeShareMantissa;
-
-        // Emit NewProtocolSeizeShareMantissa(oldProtocolSeizeShareMantissa, newProtocolSeizeShareMantissa)
-        emit NewProtocolSeizeShare(
-            oldProtocolSeizeShareMantissa,
-            newProtocolSeizeShareMantissa
-        );
 
         return uint256(Error.NO_ERROR);
     }

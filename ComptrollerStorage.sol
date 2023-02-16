@@ -43,7 +43,7 @@ abstract contract ComptrollerV2Storage is ComptrollerV1Storage {
     struct Market {
         /// @notice Whether or not this market is listed
         bool isListed;
-
+        // markets marked with autoCollaterize are automatically set as collateral for the user at the first mint
         bool autoCollaterize;
         /**
          * @notice Multiplier representing the most one can borrow against their collateral in this market.

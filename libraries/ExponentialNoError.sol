@@ -74,12 +74,12 @@ contract ExponentialNoError {
     }
 
     function safe224(uint n) pure internal returns (uint224) {
-        require(n < 2**224, "safe224 overflow");
+        require(n <= type(uint224).max, "safe224 overflow");
         return uint224(n);
     }
 
     function safe32(uint n) pure internal returns (uint32) {
-        require(n < 2**32, "safe32 overflow");
+        require(n <= type(uint32).max, "safe32 overflow");
         return uint32(n);
     }
 
