@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "./otokens/OMatic.sol";
+import "./otokens/ONative.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
 /**
@@ -10,40 +10,40 @@ import "@openzeppelin/contracts/utils/Address.sol";
  */
 contract Maximillion {
     /**
-     * @notice The default oMatic market to repay in
+     * @notice The default oNative market to repay in
      */
-    OMatic public immutable oMatic;
+    ONative public immutable oNative;
 
     /**
-     * @notice Construct a Maximillion to repay max in a OMatic market
+     * @notice Construct a Maximillion to repay max in a ONative market
      */
-    constructor(OMatic oMatic_) {
-        oMatic = oMatic_;
+    constructor(ONative oNative_) {
+        oNative = oNative_;
     }
 
     /**
-     * @notice msg.sender sends Matic to repay an account's borrow in the oMatic market
-     * @dev The provided Matic is applied towards the borrow balance, any excess is refunded
+     * @notice msg.sender sends Native to repay an account's borrow in the oNative market
+     * @dev The provided Native is applied towards the borrow balance, any excess is refunded
      * @param borrower The address of the borrower account to repay on behalf of
      */
     function repayBehalf(address borrower) public payable {
-        repayBehalfExplicit(borrower, oMatic);
+        repayBehalfExplicit(borrower, oNative);
     }
 
     /**
-     * @notice msg.sender sends Matic to repay an account's borrow in a oMatic market
-     * @dev The provided Matic is applied towards the borrow balance, any excess is refunded
+     * @notice msg.sender sends Native to repay an account's borrow in a oNative market
+     * @dev The provided Native is applied towards the borrow balance, any excess is refunded
      * @param borrower The address of the borrower account to repay on behalf of
-     * @param oMatic_ The address of the oMatic contract to repay in
+     * @param oNative_ The address of the oNative contract to repay in
      */
-    function repayBehalfExplicit(address borrower, OMatic oMatic_) public payable {
+    function repayBehalfExplicit(address borrower, ONative oNative_) public payable {
         uint received = msg.value;
-        uint borrows = oMatic_.borrowBalanceCurrent(borrower);
+        uint borrows = oNative_.borrowBalanceCurrent(borrower);
         if (received > borrows) {
-            oMatic_.repayBorrowBehalf{value: borrows}(borrower);
+            oNative_.repayBorrowBehalf{value: borrows}(borrower);
             Address.sendValue(payable(msg.sender), received - borrows);
         } else {
-            oMatic_.repayBorrowBehalf{value: received}(borrower);
+            oNative_.repayBorrowBehalf{value: received}(borrower);
         }
     }
 }

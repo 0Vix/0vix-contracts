@@ -10,7 +10,7 @@ contract OvixChainlinkOracleV2 is PriceOracle {
 
     address public admin;
     uint256 public validPeriod;
-    address public oMatic;
+    address public oNative;
 
     struct PriceData {
         uint256 price;
@@ -32,10 +32,10 @@ contract OvixChainlinkOracleV2 is PriceOracle {
     event HeartbeatSet(address feed, uint256 heartbeat);
     event ValidPeriodSet(uint256 validPeriod);
 
-    constructor(address _oMatic) {
+    constructor(address _oNative) {
         admin = msg.sender;
         validPeriod = 300; // 5 minutes
-        _setOMatic(_oMatic);
+        _setONative(_oNative);
     }
 
     function getUnderlyingPrice(IOToken oToken)
@@ -44,7 +44,7 @@ contract OvixChainlinkOracleV2 is PriceOracle {
         override
         returns (uint)
     {
-        if (address(oToken) == oMatic) {
+        if (address(oToken) == oNative) {
             return getChainlinkPrice(getFeed(address(oToken)));
         }
         return getPrice(oToken);
@@ -159,12 +159,12 @@ contract OvixChainlinkOracleV2 is PriceOracle {
         admin = newAdmin;        
     }
 
-    function setOMatic(address _oMatic) external onlyAdmin {
-        _setOMatic(_oMatic);
+    function setONative(address _oNative) external onlyAdmin {
+        _setONative(_oNative);
     }
 
-    function _setOMatic(address _oMatic) internal {
-        oMatic = _oMatic;
+    function _setONative(address _oNative) internal {
+        oNative = _oNative;
     }
 
     modifier onlyAdmin() {

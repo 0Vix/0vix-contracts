@@ -4,16 +4,16 @@ pragma solidity 0.8.4;
 import "./abstract/OToken.sol";
 
 /**
- * @title 0VIX's OMatic Contract
- * @notice OToken which wraps Matic
+ * @title 0VIX's ONative Contract
+ * @notice OToken which wraps Native
  * @author 0VIX
  */
-contract OMatic is OToken {
+contract ONative is OToken {
 
     bool public isInit = true;  // init lock, only proxy can run init
 
     /**
-     * @notice Construct a new OMatic money market
+     * @notice Construct a new ONative money market
      * @param comptroller_ The address of the Comptroller
      * @param interestRateModel_ The address of the interest rate model
      * @param initialExchangeRateMantissa_ The initial exchange rate, scaled by 1e18
@@ -136,7 +136,7 @@ contract OMatic is OToken {
     }
 
     /**
-     * @notice Send Matic to OMatic to mint
+     * @notice Send Native coin to ONative to mint
      */
     receive() external payable {
         (uint256 err, ) = mintInternal(msg.value);
@@ -146,9 +146,9 @@ contract OMatic is OToken {
     /*** Safe Token ***/
 
     /**
-     * @notice Gets balance of this contract in terms of Matic, before this message
+     * @notice Gets balance of this contract in terms of Native, before this message
      * @dev This excludes the value of the current message, if any
-     * @return The quantity of Matic owned by this contract
+     * @return The quantity of Native owned by this contract
      */
     function getCashPrior() internal view override returns (uint256) {
         (MathError err, uint256 startingBalance) = subUInt(
@@ -161,9 +161,9 @@ contract OMatic is OToken {
 
     /**
      * @notice Perform the actual transfer in, which is a no-op
-     * @param from Address sending the Matic
-     * @param amount Amount of Matic being sent
-     * @return The actual amount of Matic transferred
+     * @param from Address sending the Native
+     * @param amount Amount of Native being sent
+     * @return The actual amount of Native transferred
      */
     function doTransferIn(address from, uint256 amount)
         internal override
@@ -176,7 +176,7 @@ contract OMatic is OToken {
     }
 
     function doTransferOut(address payable to, uint256 amount) internal override {
-        /* Send the Matic, with minimal gas and revert on failure */
+        /* Send the Native, with minimal gas and revert on failure */
         to.transfer(amount);
     }
 

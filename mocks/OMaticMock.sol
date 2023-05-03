@@ -1,14 +1,14 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "../otokens/OMatic.sol";
+import "../otokens/ONative.sol";
 
 import "../interfaces/IComptroller.sol";
 import "../interest-rate-models/interfaces/IInterestRateModel.sol";
 import "../otokens/interfaces/IOToken.sol";
 
 
-contract OMaticMock is OMatic {
+contract ONativeMock is ONative {
     uint256 public blockTimestamp = 1647281432;
     uint256 public harnessExchangeRate;
     bool public harnessExchangeRateStored;

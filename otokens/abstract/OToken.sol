@@ -781,7 +781,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         /*
          *  We call `doTransferIn` for the minter and the mintAmount.
-         *  Note: The oToken must handle variations between ERC-20 and MATIC underlying.
+         *  Note: The oToken must handle variations between ERC-20 and NATIVE underlying.
          *  `doTransferIn` reverts if anything goes wrong, since we can't be sure if
          *  side-effects occurred. The function returns the amount actually transferred,
          *  in case of a fee. On success, the oToken holds an additional `actualMintAmount`
@@ -1091,7 +1091,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         /*
          * We invoke doTransferOut for the redeemer and the redeemAmount.
-         *  Note: The oToken must handle variations between ERC-20 and MATIC underlying.
+         *  Note: The oToken must handle variations between ERC-20 and NATIVE underlying.
          *  On success, the oToken has redeemAmount less of cash.
          *  doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
          */
@@ -1230,7 +1230,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         /*
          * We invoke doTransferOut for the borrower and the borrowAmount.
-         *  Note: The oToken must handle variations between ERC-20 and MATIC underlying.
+         *  Note: The oToken must handle variations between ERC-20 and NATIVE underlying.
          *  On success, the oToken borrowAmount less of cash.
          *  doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
          */
@@ -1377,7 +1377,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         /*
          * We call doTransferIn for the payer and the repayAmount
-         *  Note: The oToken must handle variations between ERC-20 and MATIC underlying.
+         *  Note: The oToken must handle variations between ERC-20 and NATIVE underlying.
          *  On success, the oToken holds an additional repayAmount of cash.
          *  doTransferIn reverts if anything goes wrong, since we can't be sure if side effects occurred.
          *   it returns the amount actually transferred, in case of a fee.
@@ -2018,7 +2018,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
 
         /*
          * We call doTransferIn for the caller and the addAmount
-         *  Note: The oToken must handle variations between ERC-20 and MATIC underlying.
+         *  Note: The oToken must handle variations between ERC-20 and NATIVE underlying.
          *  On success, the oToken holds an additional addAmount of cash.
          *  doTransferIn reverts if anything goes wrong, since we can't be sure if side effects occurred.
          *  it returns the amount actually transferred, in case of a fee.

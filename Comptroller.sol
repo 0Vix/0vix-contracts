@@ -1930,7 +1930,7 @@ contract Comptroller is
     }
 
     /**
-     * @notice payable function needed to receive MATIC
+     * @notice payable function needed to receive NATIVE
      */
     receive() external payable {}
 }
