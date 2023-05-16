@@ -15,25 +15,25 @@ contract PythMock is IPyth {
         }
     }
 
-    function getValidTimePeriod() external view returns (uint validTimePeriod) {
+    function getValidTimePeriod() external view override returns (uint validTimePeriod) {
         revert NotImplemented();
     }
 
     function getPrice(
         bytes32 id
-    ) external view returns (PythStructs.Price memory price) {
+    ) external view override returns (PythStructs.Price memory price) {
         revert NotImplemented();
     }
 
     function getEmaPrice(
         bytes32 id
-    ) external view returns (PythStructs.Price memory price) {
+    ) external view override returns (PythStructs.Price memory price) {
         revert NotImplemented();
     }
 
     function getPriceUnsafe(
         bytes32 id
-    ) external view returns (PythStructs.Price memory price) {
+    ) external view override returns (PythStructs.Price memory price) {
         price = prices[id];
         price.publishTime = block.timestamp;
     }
@@ -41,24 +41,24 @@ contract PythMock is IPyth {
     function getPriceNoOlderThan(
         bytes32 id,
         uint age
-    ) external view returns (PythStructs.Price memory price) {
+    ) external view override returns (PythStructs.Price memory price) {
         revert NotImplemented();
     }
 
     function getEmaPriceUnsafe(
         bytes32 id
-    ) external view returns (PythStructs.Price memory price) {
+    ) external view override returns (PythStructs.Price memory price) {
         revert NotImplemented();
     }
 
     function getEmaPriceNoOlderThan(
         bytes32 id,
         uint age
-    ) external view returns (PythStructs.Price memory price) {
+    ) external view override returns (PythStructs.Price memory price) {
         revert NotImplemented();
     }
 
-    function updatePriceFeeds(bytes[] calldata updateData) external payable {
+    function updatePriceFeeds(bytes[] calldata updateData) external payable override {
         revert NotImplemented();
     }
 
@@ -66,13 +66,13 @@ contract PythMock is IPyth {
         bytes[] calldata updateData,
         bytes32[] calldata priceIds,
         uint64[] calldata publishTimes
-    ) external payable {
+    ) external payable override {
         revert NotImplemented();
     }
 
     function getUpdateFee(
         bytes[] calldata updateData
-    ) external view returns (uint feeAmount) {
+    ) external view override returns (uint feeAmount) {
         revert NotImplemented();
     }
     function parsePriceFeedUpdates(
@@ -80,7 +80,7 @@ contract PythMock is IPyth {
         bytes32[] calldata priceIds,
         uint64 minPublishTime,
         uint64 maxPublishTime
-    ) external payable returns (PythStructs.PriceFeed[] memory priceFeeds) {
+    ) external payable override returns (PythStructs.PriceFeed[] memory priceFeeds) {
         revert NotImplemented();
     }
 }
