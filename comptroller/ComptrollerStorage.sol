@@ -1,11 +1,11 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "./otokens/interfaces/IOToken.sol";
-import "./PriceOracle.sol";
-import "./vote-escrow/interfaces/IBoostManager.sol";
+import "../otokens/interfaces/IOToken.sol";
+import "../oracles/chainlink/PriceOracle.sol";
+import "../vote-escrow/interfaces/IBoostManager.sol";
 
-import "./interfaces/IComptroller.sol";
+import "../interfaces/IComptroller.sol";
 import "./UnitrollerAdminStorage.sol";
 
 abstract contract ComptrollerV1Storage is IComptroller, UnitrollerAdminStorage  {

@@ -1,9 +1,9 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "../PriceOracle.sol";
-import "../otokens/OErc20.sol";
-import "../otokens/interfaces/IEIP20.sol";
+import "./PriceOracle.sol";
+import "../../otokens/OErc20.sol";
+import "../../otokens/interfaces/IEIP20.sol";
 import "./interfaces/IAggregatorV2V3.sol";
 
 contract OvixChainlinkOracleV2 is PriceOracle {

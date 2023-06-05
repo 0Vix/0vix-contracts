@@ -1,9 +1,9 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "./libraries/ErrorReporter.sol";
-import "./libraries/ExponentialNoError.sol";
-import "./interfaces/IComptroller.sol";
+import "../libraries/ErrorReporter.sol";
+import "../libraries/ExponentialNoError.sol";
+import "../interfaces/IComptroller.sol";
 import "./ComptrollerStorage.sol";
 
 interface I0vix {

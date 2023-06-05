@@ -2,7 +2,7 @@
 pragma solidity 0.8.4;
 
 import "../otokens/interfaces/IOToken.sol";
-import "../PriceOracle.sol";
+import "../oracles/chainlink/PriceOracle.sol";
 
 interface IComptroller {
     /// @notice Indicator that this is a Comptroller contract (for inspection)

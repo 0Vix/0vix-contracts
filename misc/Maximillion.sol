@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "./otokens/ONative.sol";
+import "../otokens/ONative.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
 /**

@@ -2,7 +2,7 @@
 pragma solidity 0.8.4;
 
 import "../interfaces/IComptroller.sol";
-import "../PriceOracle.sol";
+import "../oracles/chainlink/PriceOracle.sol";
 
 
 contract BoolComptroller is IComptroller {

@@ -2,9 +2,9 @@
 pragma solidity 0.8.4;
 
 import "./interfaces/IAggregatorV2V3.sol";
-import "../otokens/OErc20.sol";
-import "../otokens/interfaces/IEIP20.sol";
-import "../PriceOracle.sol";
+import "../../otokens/OErc20.sol";
+import "../../otokens/interfaces/IEIP20.sol";
+import "./PriceOracle.sol";
 
 /**
  * @title MockV3Aggregator **modified**

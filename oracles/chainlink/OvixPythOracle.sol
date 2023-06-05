@@ -2,8 +2,8 @@
 pragma solidity 0.8.4;
 
 import "./PriceOracle.sol";
-import "./otokens/OErc20.sol";
-import "./otokens/interfaces/IEIP20.sol";
+import "../../otokens/OErc20.sol";
+import "../../otokens/interfaces/IEIP20.sol";
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
