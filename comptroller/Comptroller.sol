@@ -392,6 +392,8 @@ contract Comptroller is
         address redeemer,
         uint256 redeemTokens
     ) external override returns (uint256) {
+        require(!guardianPaused[oToken].redeem, "redeem is paused");
+
         uint256 allowed = redeemAllowedInternal(oToken, redeemer, redeemTokens);
         if (allowed != uint256(Error.NO_ERROR)) {
             return allowed;
@@ -565,6 +567,7 @@ contract Comptroller is
         address borrower,
         uint256 repayAmount
     ) external override returns (uint256) {
+        require(!guardianPaused[oToken].repay, "repay is paused");
         // Shh - currently unused
         payer;
         borrower;
@@ -1336,7 +1339,7 @@ contract Comptroller is
         });
 
         emit MarketAutoCollateralized(_autoCollaterize);
-        
+
         for (uint i = 0; i < allMarkets.length; i ++) {
             require(allMarkets[i] != IOToken(oToken), "market already added");
         }
@@ -1470,10 +1473,10 @@ contract Comptroller is
         return state;
     }
 
-    function _setBorrowPaused(IOToken oToken, bool state)
-        public
-        returns (bool)
-    {
+    function _setBorrowPaused(
+        IOToken oToken,
+        bool state
+    ) public returns (bool) {
         require(
             markets[address(oToken)].isListed,
             "cannot pause: market not listed"
@@ -1483,6 +1486,38 @@ contract Comptroller is
 
         guardianPaused[address(oToken)].borrow = state;
         emit ActionPaused(oToken, "Borrow", state);
+        return state;
+    }
+
+    function _setRedeemPaused(
+        IOToken oToken,
+        bool state
+    ) public returns (bool) {
+        require(
+            markets[address(oToken)].isListed,
+            "cannot pause: market not listed"
+        );
+        onlyAdminOrGuardian();
+        require(msg.sender == admin || state, "only admin can unpause");
+
+        guardianPaused[address(oToken)].redeem = state;
+        emit ActionPaused(oToken, "Redeem", state);
+        return state;
+    }
+
+    function _setRepayPaused(
+        IOToken oToken,
+        bool state
+    ) public returns (bool) {
+        require(
+            markets[address(oToken)].isListed,
+            "cannot pause: market not listed"
+        );
+        onlyAdminOrGuardian();
+        require(msg.sender == admin || state, "only admin can unpause");
+
+        guardianPaused[address(oToken)].repay = state;
+        emit ActionPaused(oToken, "Repay", state);
         return state;
     }
 
@@ -1552,7 +1587,7 @@ contract Comptroller is
             // Borrow speed updated so let's update borrow state to ensure that
             //  1. Reward accrued properly for the old speed, and
             //  2. Reward accrued at the new speed starts after this block.
-            Exp memory borrowIndex = Exp({mantissa: oToken.borrowIndex()});
+            Exp memory borrowIndex = Exp({ mantissa: oToken.borrowIndex() });
             updateRewardBorrowIndex(address(oToken), borrowIndex);
 
             // Update speed and emit event
@@ -1995,6 +2030,28 @@ contract Comptroller is
     function setAutoCollaterize(address market, bool flag) external onlyAdmin {
         markets[market].autoCollaterize = flag;
         emit MarketAutoCollateralized(flag);
+    }
+
+    /**
+     * Pause or unpause all protocol functionality
+     * - Pause can be invoked by admin or pause guardian
+     * - Unpause can be invoked by admin only
+     */
+    function setProtocolPaused(bool _paused) public {
+
+        for (uint i; i < allMarkets.length;) {
+            IOToken market = allMarkets[i];
+            _setBorrowPaused(market, _paused);
+            _setMintPaused(market, _paused);
+            _setRedeemPaused(market, _paused);
+            _setRepayPaused(market, _paused);
+
+            unchecked {
+                ++i;
+            }
+        }
+        _setSeizePaused(_paused);
+        _setTransferPaused(_paused);
     }
 
     /**

@@ -70,10 +70,11 @@ abstract contract ComptrollerV2Storage is ComptrollerV1Storage {
     bool public _borrowGuardianPaused;
     bool public transferGuardianPaused;
     bool public seizeGuardianPaused;
-    
     struct PauseData {
         bool mint;
         bool borrow;
+        bool redeem;
+        bool repay;
     }
 
     mapping(address => PauseData) public guardianPaused;
@@ -111,6 +112,7 @@ abstract contract ComptrollerV3Storage is ComptrollerV2Storage {
 
     /// @notice The VIX accrued but not yet transferred to each user
     mapping(address => uint) public rewardAccrued;
+
 }
 
 abstract contract ComptrollerV4Storage is ComptrollerV3Storage {
