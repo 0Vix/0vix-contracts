@@ -1496,7 +1496,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         IOToken oTokenCollateral
     ) internal returns (uint256, uint256) {
         /* Fail if liquidate not allowed */
-        uint256 allowed = comptroller.liquidateBorrowAllowed(
+        (uint256 allowed, uint256 dynamicLiquidationIncentive) = comptroller.liquidateBorrowAllowed(
             address(this),
             address(oTokenCollateral),
             liquidator,
@@ -1593,7 +1593,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
             .liquidateCalculateSeizeTokens(
                 address(this),
                 address(oTokenCollateral),
-                actualRepayAmount
+                actualRepayAmount,
+                dynamicLiquidationIncentive
             );
         require(
             amountSeizeError == uint256(Error.NO_ERROR),
@@ -1613,13 +1614,15 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
                 address(this),
                 liquidator,
                 borrower,
-                seizeTokens
+                seizeTokens,
+                dynamicLiquidationIncentive
             );
         } else {
             seizeError = oTokenCollateral.seize(
                 liquidator,
                 borrower,
-                seizeTokens
+                seizeTokens,
+                dynamicLiquidationIncentive
             );
         }
 
@@ -1649,14 +1652,16 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @param liquidator The account receiving seized collateral
      * @param borrower The account having collateral seized
      * @param seizeTokens The number of oTokens to seize
+     * @param dynamicLiquidationIncentive The liquidation incentive that will be used to calculate protocol seize share
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function seize(
         address liquidator,
         address borrower,
-        uint256 seizeTokens
+        uint256 seizeTokens,
+        uint256 dynamicLiquidationIncentive
     ) external override nonReentrant returns (uint256) {
-        return seizeInternal(msg.sender, liquidator, borrower, seizeTokens);
+        return seizeInternal(msg.sender, liquidator, borrower, seizeTokens, dynamicLiquidationIncentive);
     }
 
     struct SeizeInternalLocalVars {
@@ -1679,13 +1684,15 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
      * @param liquidator The account receiving seized collateral
      * @param borrower The account having collateral seized
      * @param seizeTokens The number of oTokens to seize
+     * @param dynamicLiquidationIncentive The liquidation incentive that will be used to calculate protocol seize share
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */
     function seizeInternal(
         address seizerToken,
         address liquidator,
         address borrower,
-        uint256 seizeTokens
+        uint256 seizeTokens,
+        uint256 dynamicLiquidationIncentive
     ) internal returns (uint256) {
         /* Fail if seize not allowed */
         uint256 allowed = comptroller.seizeAllowed(
@@ -1733,10 +1740,19 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
                 );
         }
 
-        vars.protocolSeizeTokens = mul_(
-            seizeTokens,
-            Exp({mantissa: protocolSeizeShareMantissa})
-        );
+        if (dynamicLiquidationIncentive > 1e18) {
+            uint256 i;
+            unchecked { i = dynamicLiquidationIncentive - 1e18; }
+            uint256 protocolSeizeShare = mul_(
+                i, 
+                Exp({mantissa: protocolSeizeShareMantissa})
+            ); 
+
+            vars.protocolSeizeTokens = mul_(
+                seizeTokens,
+                Exp({mantissa: protocolSeizeShare})
+            );
+        }
 
         vars.liquidatorSeizeTokens = seizeTokens - vars.protocolSeizeTokens;
 

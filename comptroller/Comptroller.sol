@@ -420,7 +420,8 @@ contract Comptroller is
         (
             Error err,
             ,
-            uint256 shortfall
+            uint256 shortfall,
+
         ) = getHypotheticalAccountLiquidityInternal(
                 redeemer,
                 IOToken(oToken),
@@ -506,7 +507,8 @@ contract Comptroller is
         (
             Error err,
             ,
-            uint256 shortfall
+            uint256 shortfall,
+
         ) = getHypotheticalAccountLiquidityInternal(
                 borrower,
                 IOToken(oToken),
@@ -606,7 +608,7 @@ contract Comptroller is
     }
 
     /**
-     * @notice Checks if the liquidation should be allowed to occur
+     * @notice Checks if the liquidation should be allowed to occur and calculates dynamic liquidation incentive
      * @param oTokenBorrowed Asset which was borrowed by the borrower
      * @param oTokenCollateral Asset which was used as collateral and will be seized
      * @param liquidator The address repaying the borrow and seizing the collateral
@@ -619,7 +621,7 @@ contract Comptroller is
         address liquidator,
         address borrower,
         uint256 repayAmount
-    ) external view override returns (uint256) {
+    ) external view override returns (uint256, uint256) {
         // Shh - currently unused
         liquidator;
 
@@ -627,12 +629,14 @@ contract Comptroller is
             !markets[oTokenBorrowed].isListed ||
             !markets[oTokenCollateral].isListed
         ) {
-            return uint256(Error.MARKET_NOT_LISTED);
+            return (uint256(Error.MARKET_NOT_LISTED), 0);
         }
 
         uint256 borrowBalance = IOToken(oTokenBorrowed).borrowBalanceStored(
             borrower
         );
+
+        uint256 dynamicLiquidationIncentiveMantissa;
 
         /* allow accounts to be liquidated if the market is deprecated */
         if (isDeprecated(IOToken(oTokenBorrowed))) {
@@ -640,12 +644,15 @@ contract Comptroller is
                 borrowBalance >= repayAmount,
                 "Can not repay more than the total borrow"
             );
+
+            dynamicLiquidationIncentiveMantissa = 1e18;
         } else {
             /* The borrower must have shortfall in order to be liquidatable */
             (
                 Error err,
                 ,
-                uint256 shortfall
+                uint256 shortfall,
+                uint256 liquidationIncentive
             ) = getHypotheticalAccountLiquidityInternal(
                     borrower,
                     IOToken(address(0)),
@@ -654,23 +661,48 @@ contract Comptroller is
                 );
 
             if (err != Error.NO_ERROR) {
-                return uint256(err);
+                return (uint256(err), 0);
             }
 
+            dynamicLiquidationIncentiveMantissa = liquidationIncentive;
+
             if (shortfall == 0) {
-                return uint256(Error.INSUFFICIENT_SHORTFALL);
+                return (uint256(Error.INSUFFICIENT_SHORTFALL), 0);
             }
 
             /* The liquidator may not repay more than what is allowed by the closeFactor */
+            Exp memory defaultCloseFactor = Exp({mantissa: closeFactorMantissa});
+            Exp memory dynamicLiquidationIncentive = Exp({mantissa: dynamicLiquidationIncentiveMantissa});
+
+            /*  closeFactor = 10 * ( ( ( dynamicLiquidationIncentive - 1 ) * defaultCloseFactor ) + ( defaultLiquidationIncentive - dynamicLiquidationIncentive ) )
+                which converts to:
+                closeFactor = 10 * (defaultCloseFactor * liquidationIncentive + defaultLiquidationIncentive - defaultCloseFactor - liquidationIncentive) 
+            */
+            Exp memory downscaledCloseFactor = sub_(
+                sub_(
+                    add_(
+                        mul_(
+                            defaultCloseFactor, 
+                            dynamicLiquidationIncentive), 
+                        Exp({mantissa: liquidationIncentiveMantissa})), 
+                    defaultCloseFactor), 
+                dynamicLiquidationIncentive);
+
+            uint256 closeFactor = mul_(downscaledCloseFactor, 10).mantissa;
+            if (closeFactor > 1e18) {
+                closeFactor = 1e18;
+            } 
+
             uint256 maxClose = mul_ScalarTruncate(
-                Exp({mantissa: closeFactorMantissa}),
+                Exp({mantissa: closeFactor}),
                 borrowBalance
             );
             if (repayAmount > maxClose) {
-                return uint256(Error.TOO_MUCH_REPAY);
+                return (uint256(Error.TOO_MUCH_REPAY), 0);
             }
         }
-        return uint256(Error.NO_ERROR);
+
+        return (uint256(Error.NO_ERROR), dynamicLiquidationIncentiveMantissa);
     }
 
     /**
@@ -737,6 +769,8 @@ contract Comptroller is
         ) {
             return uint256(Error.COMPTROLLER_MISMATCH);
         }
+
+        require(accountMembership[oTokenCollateral][borrower], "borrower exited collateral market");
 
         // Keep the flywheel moving
         updateRewardSupplyIndex(oTokenCollateral);
@@ -840,7 +874,9 @@ contract Comptroller is
      */
     struct AccountLiquidityLocalVars {
         uint256 sumCollateral;
+        uint256 totalCollateral;
         uint256 sumBorrowPlusEffects;
+        uint256 dynamicLiquidationIncentive;
         uint256 oTokenBalance;
         uint256 borrowBalance;
         uint256 exchangeRateMantissa;
@@ -869,7 +905,7 @@ contract Comptroller is
         (
             Error err,
             uint256 liquidity,
-            uint256 shortfall
+            uint256 shortfall, 
         ) = getHypotheticalAccountLiquidityInternal(
                 account,
                 IOToken(address(0)),
@@ -888,7 +924,8 @@ contract Comptroller is
      * @param borrowAmount The amount of underlying to hypothetically borrow
      * @return (possible error code (semi-opaque),
                 hypothetical account liquidity in excess of collateral requirements,
-     *          hypothetical account shortfall below collateral requirements)
+     *          hypothetical account shortfall below collateral requirements,
+     *          dynamic liquidation incentive)
      */
     function getHypotheticalAccountLiquidity(
         address account,
@@ -901,20 +938,22 @@ contract Comptroller is
         returns (
             uint256,
             uint256,
+            uint256,
             uint256
         )
     {
         (
             Error err,
             uint256 liquidity,
-            uint256 shortfall
+            uint256 shortfall,
+            uint256 liquidationIncentive
         ) = getHypotheticalAccountLiquidityInternal(
                 account,
                 IOToken(oTokenModify),
                 redeemTokens,
                 borrowAmount
             );
-        return (uint256(err), liquidity, shortfall);
+        return (uint256(err), liquidity, shortfall, liquidationIncentive);
     }
 
     /**
@@ -927,7 +966,8 @@ contract Comptroller is
      *  without calculating accumulated interest.
      * @return (possible error code,
                 hypothetical account liquidity in excess of collateral requirements,
-     *          hypothetical account shortfall below collateral requirements)
+     *          hypothetical account shortfall below collateral requirements,
+     *          dynamic liquidation incentive)
      */
     function getHypotheticalAccountLiquidityInternal(
         address account,
@@ -939,6 +979,7 @@ contract Comptroller is
         view
         returns (
             Error,
+            uint256,
             uint256,
             uint256
         )
@@ -960,7 +1001,7 @@ contract Comptroller is
             ) = asset.getAccountSnapshot(account);
             if (oErr != 0) {
                 // semi-opaque error code, we assume NO_ERROR == 0 is invariant between upgrades
-                return (Error.SNAPSHOT_ERROR, 0, 0);
+                return (Error.SNAPSHOT_ERROR, 0, 0, 0);
             }
             vars.collateralFactor = Exp({
                 mantissa: markets[address(asset)].collateralFactorMantissa
@@ -970,7 +1011,7 @@ contract Comptroller is
             // Get the normalized price of the asset
             vars.oraclePriceMantissa = oracle.getUnderlyingPrice(asset);
             if (vars.oraclePriceMantissa == 0) {
-                return (Error.PRICE_ERROR, 0, 0);
+                return (Error.PRICE_ERROR, 0, 0, 0);
             }
             vars.oraclePrice = Exp({mantissa: vars.oraclePriceMantissa});
 
@@ -985,6 +1026,12 @@ contract Comptroller is
                 vars.tokensToDenom,
                 vars.oTokenBalance,
                 vars.sumCollateral
+            );
+
+            vars.totalCollateral = mul_ScalarTruncateAddUInt(
+                mul_(vars.exchangeRate, vars.oraclePrice),
+                vars.oTokenBalance,
+                vars.totalCollateral
             );
 
             // sumBorrowPlusEffects += oraclePrice * borrowBalance
@@ -1013,6 +1060,23 @@ contract Comptroller is
                 );
             }
         }
+       
+        if (vars.sumBorrowPlusEffects == 0) {
+            vars.dynamicLiquidationIncentive = liquidationIncentiveMantissa;
+        }
+        else {
+            vars.dynamicLiquidationIncentive = div_(
+                vars.totalCollateral,
+                Exp({mantissa: vars.sumBorrowPlusEffects})
+            );
+        }
+
+        if (vars.dynamicLiquidationIncentive >= liquidationIncentiveMantissa) {
+            vars.dynamicLiquidationIncentive = liquidationIncentiveMantissa;
+        }
+        else if(vars.dynamicLiquidationIncentive != 0) {
+            unchecked { vars.dynamicLiquidationIncentive -= 1; }
+        }
 
         // These are safe, as the underflow condition is checked first
         unchecked {
@@ -1020,13 +1084,15 @@ contract Comptroller is
                 return (
                     Error.NO_ERROR,
                     vars.sumCollateral - vars.sumBorrowPlusEffects,
-                    0
+                    0,
+                    vars.dynamicLiquidationIncentive
                 );
             } else {
                 return (
                     Error.NO_ERROR,
                     0,
-                    vars.sumBorrowPlusEffects - vars.sumCollateral
+                    vars.sumBorrowPlusEffects - vars.sumCollateral,
+                    vars.dynamicLiquidationIncentive
                 );
             }
         }
@@ -1038,12 +1104,14 @@ contract Comptroller is
      * @param oTokenBorrowed The address of the borrowed oToken
      * @param oTokenCollateral The address of the collateral oToken
      * @param actualRepayAmount The amount of oTokenBorrowed underlying to convert into oTokenCollateral tokens
+     * @param dynamicLiquidationIncentive The liquidation incentive calculated based on LTV
      * @return (errorCode, number of oTokenCollateral tokens to be seized in a liquidation)
      */
     function liquidateCalculateSeizeTokens(
         address oTokenBorrowed,
         address oTokenCollateral,
-        uint256 actualRepayAmount
+        uint256 actualRepayAmount,
+        uint256 dynamicLiquidationIncentive
     ) external view override returns (uint256, uint256) {
         /* Read oracle prices for borrowed and collateral markets */
         uint256 priceBorrowedMantissa = oracle.getUnderlyingPrice(
@@ -1067,7 +1135,7 @@ contract Comptroller is
             .exchangeRateStored(); // Note: reverts on error
 
         Exp memory numerator = mul_(
-            Exp({mantissa: liquidationIncentiveMantissa}),
+            Exp({mantissa: dynamicLiquidationIncentive}),
             Exp({mantissa: priceBorrowedMantissa})
         );
         Exp memory denominator = mul_(

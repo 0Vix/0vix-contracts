@@ -35,7 +35,7 @@ interface IComptroller {
         address oTokenCollateral,
         address liquidator,
         address borrower,
-        uint repayAmount) external returns (uint);
+        uint repayAmount) external returns (uint, uint);
 
     function seizeAllowed(
         address oTokenCollateral,
@@ -59,7 +59,8 @@ interface IComptroller {
     function liquidateCalculateSeizeTokens(
         address oTokenBorrowed,
         address oTokenCollateral,
-        uint repayAmount) external view returns (uint, uint);
+        uint repayAmount,
+        uint dynamicLiquidationIncentive) external view returns (uint, uint);
 
 
 

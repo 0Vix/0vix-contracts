@@ -122,13 +122,13 @@ contract BoolComptroller is IComptroller {
         address _cTokenCollateral,
         address _liquidator,
         address _borrower,
-        uint _repayAmount) public override returns (uint) {
+        uint _repayAmount) public override returns (uint, uint) {
         _cTokenBorrowed;
         _cTokenCollateral;
         _liquidator;
         _borrower;
         _repayAmount;
-        return allowLiquidateBorrow ? noError : opaqueError;
+        return allowLiquidateBorrow ? (noError, 11e17) : (opaqueError, 0);
     }
 
     function liquidateBorrowVerify(
@@ -244,7 +244,8 @@ contract BoolComptroller is IComptroller {
     function liquidateCalculateSeizeTokens(
         address _cTokenBorrowed,
         address _cTokenCollateral,
-        uint _repayAmount) public view override returns (uint, uint) {
+        uint _repayAmount,
+        uint dynamicLiquidationIncentive) public view override returns (uint, uint) {
         _cTokenBorrowed;
         _cTokenCollateral;
         _repayAmount;
