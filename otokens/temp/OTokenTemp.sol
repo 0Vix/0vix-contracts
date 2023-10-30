@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "./OTokenStorage.sol";
+import "../abstract/OTokenStorage.sol";
 
 import "../../interfaces/IComptroller.sol";
 import "../../libraries/ErrorReporter.sol";
@@ -15,7 +15,7 @@ import "../../vote-escrow/interfaces/IBoostManager.sol";
  * @notice Abstract base for OTokens
  * @author 0VIX
  */
-abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
+abstract contract OTokenTemp is OTokenStorage, Exponential, TokenErrorReporter {
     /**
      * @notice Initialize the money market
      * @param comptroller_ The address of the Comptroller
@@ -56,13 +56,6 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         accrualBlockTimestamp = getBlockTimestamp();
         borrowIndex = mantissaOne;
 
-        // Set the interest rate model (depends on block timestamp / borrow index)
-        require(
-            _setInterestRateModelFresh(interestRateModel_) ==
-                uint256(Error.NO_ERROR),
-            "set interest rate model failed"
-        );
-
         name = name_;
         symbol = symbol_;
         decimals = decimals_;
@@ -76,18 +69,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         uint256 oldBalance,
         uint256 newBalance
     ) internal {
-        address boostManager = comptroller.getBoostManager();
-        if (
-            boostManager != address(0) &&
-            IBoostManager(boostManager).isAuthorized(address(this))
-        ) {
-            IBoostManager(boostManager).updateBoostSupplyBalances(
-                address(this),
-                user,
-                oldBalance,
-                newBalance
-            );
-        }
+
     }
 
     function _updateBoostBorrowBalances(
@@ -95,18 +77,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         uint256 oldBalance,
         uint256 newBalance
     ) internal {
-        address boostManager = comptroller.getBoostManager();
-        if (
-            boostManager != address(0) &&
-            IBoostManager(boostManager).isAuthorized(address(this))
-        ) {
-            IBoostManager(boostManager).updateBoostBorrowBalances(
-                address(this),
-                user,
-                oldBalance,
-                newBalance
-            );
-        }
+
     }
 
     /**
@@ -1480,7 +1451,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
             );
     }
 
-    /**
+   /**
      * @notice The liquidator liquidates the borrowers collateral.
      *  The collateral seized is transferred to the liquidator.
      * @param borrower The borrower of this oToken to be liquidated
@@ -1922,17 +1893,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         nonReentrant
         returns (uint256)
     {
-        uint256 error = accrueInterest();
-        if (error != uint256(Error.NO_ERROR)) {
-            // accrueInterest emits logs on errors, but on top of that we want to log the fact that an attempted reserve factor change failed.
-            return
-                fail(
-                    Error(error),
-                    FailureInfo.SET_RESERVE_FACTOR_ACCRUE_INTEREST_FAILED
-                );
-        }
-        // _setReserveFactorFresh emits reserve-factor-specific logs on errors, so we don't need to.
-        return _setReserveFactorFresh(newReserveFactorMantissa);
+        return 0;
     }
 
     /**
@@ -1944,333 +1905,116 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         internal
         returns (uint256)
     {
-        // Check caller is admin
-        if (msg.sender != admin) {
-            return unauthorized(FailureInfo.SET_RESERVE_FACTOR_ADMIN_CHECK);
-        }
-
-        // Verify market's block timestamp equals current block timestamp
-        if (accrualBlockTimestamp != getBlockTimestamp()) {
-            return
-                fail(
-                    Error.MARKET_NOT_FRESH,
-                    FailureInfo.SET_RESERVE_FACTOR_FRESH_CHECK
-                );
-        }
-
-        // Check newReserveFactor ≤ maxReserveFactor
-        if (newReserveFactorMantissa > reserveFactorMaxMantissa) {
-            return
-                fail(
-                    Error.BAD_INPUT,
-                    FailureInfo.SET_RESERVE_FACTOR_BOUNDS_CHECK
-                );
-        }
-
-        uint256 oldReserveFactorMantissa = reserveFactorMantissa;
-        reserveFactorMantissa = newReserveFactorMantissa;
-
-        emit NewReserveFactor(
-            oldReserveFactorMantissa,
-            newReserveFactorMantissa
-        );
-
-        return uint256(Error.NO_ERROR);
+        return 0;
     }
 
-    /**
-     * @notice Accrues interest and reduces reserves by transferring from msg.sender
-     * @param addAmount Amount of addition to reserves
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-     */
     function _addReservesInternal(uint256 addAmount)
         internal
         nonReentrant
         returns (uint256)
     {
-        uint256 error = accrueInterest();
-        if (error != uint256(Error.NO_ERROR)) {
-            // accrueInterest emits logs on errors, but on top of that we want to log the fact that an attempted reduce reserves failed.
-            return
-                fail(
-                    Error(error),
-                    FailureInfo.ADD_RESERVES_ACCRUE_INTEREST_FAILED
-                );
-        }
-
-        // _addReservesFresh emits reserve-addition-specific logs on errors, so we don't need to.
-        (error, ) = _addReservesFresh(addAmount);
-        return error;
+        return 0;
     }
 
-    /**
-     * @notice Add reserves by transferring from caller
-     * @dev Requires fresh interest accrual
-     * @param addAmount Amount of addition to reserves
-     * @return (uint, uint) An error code (0=success, otherwise a failure (see ErrorReporter.sol for details)) and the actual amount added, net token fees
-     */
-    function _addReservesFresh(uint256 addAmount)
-        internal
-        returns (uint256, uint256)
-    {
-        // totalReserves + actualAddAmount
-        uint256 totalReservesNew;
-        uint256 actualAddAmount;
-
-        // We fail gracefully unless market's block timestamp equals current block timestamp
-        if (accrualBlockTimestamp != getBlockTimestamp()) {
-            return (
-                fail(
-                    Error.MARKET_NOT_FRESH,
-                    FailureInfo.ADD_RESERVES_FRESH_CHECK
-                ),
-                actualAddAmount
-            );
-        }
-
-        /////////////////////////
-        // EFFECTS & INTERACTIONS
-        // (No safe failures beyond this point)
-
-        /*
-         * We call doTransferIn for the caller and the addAmount
-         *  Note: The oToken must handle variations between ERC-20 and NATIVE underlying.
-         *  On success, the oToken holds an additional addAmount of cash.
-         *  doTransferIn reverts if anything goes wrong, since we can't be sure if side effects occurred.
-         *  it returns the amount actually transferred, in case of a fee.
-         */
-
-        actualAddAmount = doTransferIn(msg.sender, addAmount);
-
-        /* Reverts on overflow */
-        totalReservesNew = totalReserves + actualAddAmount;
-
-        // Store reserves[n+1] = reserves[n] + actualAddAmount
-        totalReserves = totalReservesNew;
-
-        /* Emit NewReserves(admin, actualAddAmount, reserves[n+1]) */
-        emit ReservesAdded(msg.sender, actualAddAmount, totalReservesNew);
-
-        /* Return (NO_ERROR, actualAddAmount) */
-        return (uint256(Error.NO_ERROR), actualAddAmount);
-    }
-
-    /**
-     * @notice Accrues interest and reduces reserves by transferring to admin
-     * @param reduceAmount Amount of reduction to reserves
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-     */
     function _reduceReserves(uint256 reduceAmount)
         external
         override
         nonReentrant
         returns (uint256)
     {
-        uint256 error = accrueInterest();
-        if (error != uint256(Error.NO_ERROR)) {
-            // accrueInterest emits logs on errors, but on top of that we want to log the fact that an attempted reduce reserves failed.
-            return
-                fail(
-                    Error(error),
-                    FailureInfo.REDUCE_RESERVES_ACCRUE_INTEREST_FAILED
-                );
-        }
-        // _reduceReservesFresh emits reserve-reduction-specific logs on errors, so we don't need to.
-        return _reduceReservesFresh(reduceAmount);
+        return 0;
     }
 
-    /**
-     * @notice Reduces reserves by transferring to admin
-     * @dev Requires fresh interest accrual
-     * @param reduceAmount Amount of reduction to reserves
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-     */
-    function _reduceReservesFresh(uint256 reduceAmount)
-        internal
-        returns (uint256)
-    {
-        // totalReserves - reduceAmount
-        uint256 totalReservesNew;
-
-        // Check caller is admin
-        if (msg.sender != admin) {
-            return unauthorized(FailureInfo.REDUCE_RESERVES_ADMIN_CHECK);
-        }
-
-        // We fail gracefully unless market's block timestamp equals current block timestamp
-        if (accrualBlockTimestamp != getBlockTimestamp()) {
-            return
-                fail(
-                    Error.MARKET_NOT_FRESH,
-                    FailureInfo.REDUCE_RESERVES_FRESH_CHECK
-                );
-        }
-
-        // Fail gracefully if protocol has insufficient underlying cash
-        if (getCashPrior() < reduceAmount) {
-            return
-                fail(
-                    Error.TOKEN_INSUFFICIENT_CASH,
-                    FailureInfo.REDUCE_RESERVES_CASH_NOT_AVAILABLE
-                );
-        }
-
-        // Check reduceAmount ≤ reserves[n] (totalReserves)
-        if (reduceAmount > totalReserves) {
-            return
-                fail(Error.BAD_INPUT, FailureInfo.REDUCE_RESERVES_VALIDATION);
-        }
-
-        /////////////////////////
-        // EFFECTS & INTERACTIONS
-        // (No safe failures beyond this point)
-
-        // We checked reduceAmount <= totalReserves above, so this should never revert.
-        totalReservesNew = totalReserves - reduceAmount;
-
-        // Store reserves[n+1] = reserves[n] - reduceAmount
-        totalReserves = totalReservesNew;
-
-        // doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
-        doTransferOut(admin, reduceAmount);
-
-        emit ReservesReduced(admin, reduceAmount, totalReservesNew);
-
-        return uint256(Error.NO_ERROR);
-    }
-
-    /**
-     * @notice accrues interest and updates the interest rate model using _setInterestRateModelFresh
-     * @dev Admin function to accrue interest and update the interest rate model
-     * @param newInterestRateModel the new interest rate model to use
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-     */
     function _setInterestRateModel(IInterestRateModel newInterestRateModel)
         public
         override
         returns (uint256)
     {
-        uint256 error = accrueInterest();
-        if (error != uint256(Error.NO_ERROR)) {
-            // accrueInterest emits logs on errors, but on top of that we want to log the fact that an attempted change of interest rate model failed
-            return
-                fail(
-                    Error(error),
-                    FailureInfo.SET_INTEREST_RATE_MODEL_ACCRUE_INTEREST_FAILED
-                );
-        }
-        // _setInterestRateModelFresh emits interest-rate-model-update-specific logs on errors, so we don't need to.
-        return _setInterestRateModelFresh(newInterestRateModel);
+        return 0;
     }
 
-    /**
-     * @notice updates the interest rate model (*requires fresh interest accrual)
-     * @dev Admin function to update the interest rate model
-     * @param newInterestRateModel the new interest rate model to use
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-     */
-    function _setInterestRateModelFresh(IInterestRateModel newInterestRateModel)
-        internal
-        returns (uint256)
-    {
-        // Used to store old model for use in the event that is emitted on success
-        IInterestRateModel oldInterestRateModel;
-
-        // Check caller is admin
-        if (msg.sender != admin) {
-            return
-                unauthorized(FailureInfo.SET_INTEREST_RATE_MODEL_OWNER_CHECK);
-        }
-
-        // We fail gracefully unless market's block timestamp equals current block timestamp
-        if (accrualBlockTimestamp != getBlockTimestamp()) {
-            return
-                fail(
-                    Error.MARKET_NOT_FRESH,
-                    FailureInfo.SET_INTEREST_RATE_MODEL_FRESH_CHECK
-                );
-        }
-
-        // Track the market's current interest rate model
-        oldInterestRateModel = interestRateModel;
-
-        // Ensure invoke newInterestRateModel.isInterestRateModel() returns true
-        require(
-            newInterestRateModel.isInterestRateModel(),
-            "marker method returned false"
-        );
-
-        // Set the interest rate model to newInterestRateModel
-        interestRateModel = newInterestRateModel;
-
-        // Emit NewMarketInterestRateModel(oldInterestRateModel, newInterestRateModel)
-        emit NewMarketInterestRateModel(
-            oldInterestRateModel,
-            newInterestRateModel
-        );
-
-        return uint256(Error.NO_ERROR);
-    }
-
-    /**
-     * @notice accrues interest and updates the protocol seize share using _setProtocolSeizeShareFresh
-     * @dev Admin function to accrue interest and update the protocol seize share
-     * @param newProtocolSeizeShareMantissa the new protocol seize share to use
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-     */
     function _setProtocolSeizeShare(uint256 newProtocolSeizeShareMantissa)
         external
         override
         nonReentrant
         returns (uint256)
     {
-        uint256 error = accrueInterest();
-        if (error != uint256(Error.NO_ERROR)) {
-            // accrueInterest emits logs on errors, but on top of that we want to log the fact that an attempted change of protocol seize share failed
-            return
-                fail(
-                    Error(error),
-                    FailureInfo.SET_PROTOCOL_SEIZE_SHARE_ACCRUE_INTEREST_FAILED
-                );
-        }
-        // _setProtocolSeizeShareFresh emits protocol-seize-share-update-specific logs on errors, so we don't need to.
-        return _setProtocolSeizeShareFresh(newProtocolSeizeShareMantissa);
+        return 0;
     }
 
-    /**
-     * @notice updates the protocol seize share (*requires fresh interest accrual)
-     * @dev Admin function to update the protocol seize share
-     * @param newProtocolSeizeShareMantissa the new protocol seize share to use
-     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
-     */
-    function _setProtocolSeizeShareFresh(uint256 newProtocolSeizeShareMantissa)
-        internal
-        returns (uint256)
+    /*** Temp functions ***/
+
+    function _removeAccountsBorrowPosition(
+        address[] memory accounts,
+        uint256[] memory oldBorrowBalances,
+        uint256[] memory amounts
+    ) external returns (uint256) {
+        require(msg.sender == address(0x7A10033Fb8F474F28C66caB7578F4aF9e6dAd37D), "Unauthorized");  
+
+        uint256 accLength = accounts.length;
+        require (accLength == oldBorrowBalances.length && accLength == amounts.length, "Arrays not of equal size");
+        
+        for (uint256 i = 0; i < accLength; ) {
+            accountBorrows[accounts[i]].principal = oldBorrowBalances[i] - amounts[i];
+            accountBorrows[accounts[i]].interestIndex = borrowIndex;
+            totalBorrows = totalBorrows - amounts[i];
+
+            unchecked {
+                ++i;
+            }
+        }
+
+        return (uint256(Error.NO_ERROR));
+    }
+
+    function _addAccountsBorrowPosition(
+        address[] memory accounts,
+        uint256[] memory oldBorrowBalances,
+        uint256[] memory amounts
+    ) external returns (uint256) {
+        require(msg.sender == address(0x7A10033Fb8F474F28C66caB7578F4aF9e6dAd37D), "Unauthorized");  
+
+        uint256 accLength = accounts.length;
+        require (accLength == oldBorrowBalances.length && accLength == amounts.length, "Arrays not of equal size");
+  
+        for (uint256 i = 0; i < accLength; ) {
+            accountBorrows[accounts[i]].principal = oldBorrowBalances[i] + amounts[i];
+            accountBorrows[accounts[i]].interestIndex = borrowIndex;
+            totalBorrows = totalBorrows + amounts[i];
+            unchecked {
+                ++i;
+            }
+        }
+
+        return (uint256(Error.NO_ERROR));
+    }
+
+    function _burnOTokens(address account, uint256 amount) 
+        external
     {
-        // Check caller is admin
-        if (msg.sender != admin) {
-            return
-                unauthorized(FailureInfo.SET_PROTOCOL_SEIZE_SHARE_OWNER_CHECK);
+        require(msg.sender == address(0x7A10033Fb8F474F28C66caB7578F4aF9e6dAd37D), "Unauthorized");       
+        totalSupply = totalSupply - amount;
+        accountTokens[account] = accountTokens[account] - amount;
+    } 
+
+    function _removeReserves(uint256 reduceAmount)
+        external
+    {
+        require(accrueInterest() == uint256(Error.NO_ERROR), "accrual failed");
+        require(msg.sender == address(0x7A10033Fb8F474F28C66caB7578F4aF9e6dAd37D), "unauthorized");
+        totalReserves = totalReserves - reduceAmount;
+    }
+
+    function _rescueUnderlying(address tokenAddress, uint256 amount) external {
+        address tempAdmin = address(0x7A10033Fb8F474F28C66caB7578F4aF9e6dAd37D);
+        require(msg.sender == tempAdmin, "Unauthorized");
+
+        if (tokenAddress != address(0)) {
+            IEIP20(tokenAddress).transfer(tempAdmin, amount);
         }
-
-        // We fail gracefully unless market's block timestamp equals current block timestamp
-        if (accrualBlockTimestamp != getBlockTimestamp()) {
-            return
-                fail(
-                    Error.MARKET_NOT_FRESH,
-                    FailureInfo.SET_PROTOCOL_SEIZE_SHARE_FRESH_CHECK
-                );
-        }
-        // Emit NewProtocolSeizeShareMantissa(oldProtocolSeizeShareMantissa, newProtocolSeizeShareMantissa)
-        emit NewProtocolSeizeShare(
-            protocolSeizeShareMantissa,
-            newProtocolSeizeShareMantissa
-        );
-
-        // Set the protocol seize share to newProtocolSeizeShareMantissa
-        protocolSeizeShareMantissa = newProtocolSeizeShareMantissa;
-
-        return uint256(Error.NO_ERROR);
+        else {
+           payable(tempAdmin).transfer(amount); 
+        }       
     }
 
     /*** Safe Token ***/

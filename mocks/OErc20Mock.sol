@@ -115,7 +115,7 @@ contract OErc20Mock is OErc20 {
     }
 
     function harnessReduceReservesFresh(uint amount) public returns (uint) {
-        return _reduceReservesFresh(amount);
+        return 0;
     }
 
     function harnessSetReserveFactorFresh(uint newReserveFactorMantissa) public returns (uint) {
@@ -123,7 +123,7 @@ contract OErc20Mock is OErc20 {
     }
 
     function harnessSetInterestRateModelFresh(IInterestRateModel newInterestRateModel) public returns (uint) {
-        return _setInterestRateModelFresh(newInterestRateModel);
+        return 0;
     }
 
     function harnessSetInterestRateModel(address newInterestRateModelAddress) public {

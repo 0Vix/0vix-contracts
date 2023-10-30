@@ -54,7 +54,7 @@ contract BoolComptroller is IComptroller {
         return allowMint ? noError : opaqueError;
     }
 
-    function mintVerify(address _cToken, address _minter, uint _mintAmount, uint _mintTokens) external override {
+    function mintVerify(address _cToken, address _minter, uint _mintAmount, uint _mintTokens) external {
         _cToken;
         _minter;
         _mintAmount;
@@ -84,7 +84,7 @@ contract BoolComptroller is IComptroller {
         return allowBorrow ? noError : opaqueError;
     }
 
-    function borrowVerify(address _cToken, address _borrower, uint _borrowAmount) external override {
+    function borrowVerify(address _cToken, address _borrower, uint _borrowAmount) external {
         _cToken;
         _borrower;
         _borrowAmount;
@@ -166,7 +166,7 @@ contract BoolComptroller is IComptroller {
         address _cTokenBorrowed,
         address _liquidator,
         address _borrower,
-        uint _seizeTokens) external override {
+        uint _seizeTokens) external {
         _cTokenCollateral;
         _cTokenBorrowed;
         _liquidator;
@@ -191,7 +191,7 @@ contract BoolComptroller is IComptroller {
         address _cToken,
         address _src,
         address _dst,
-        uint _transferTokens) external override {
+        uint _transferTokens) external {
         _cToken;
         _src;
         _dst;

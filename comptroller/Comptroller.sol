@@ -28,14 +28,8 @@ contract Comptroller is
     ComptrollerErrorReporter,
     ExponentialNoError
 {
-    /// @notice Emitted when an admin modifies a reward updater
-    event RewardUpdaterModified(address _rewardUpdater);
-
     /// @notice Emitted when an admin supports a market
     event MarketListed(IOToken oToken);
-
-    /// @notice Emitted when market autoCollaterize flag is set
-    event MarketAutoCollateralized(bool isAutoCollateralized);
 
     /// @notice Emitted when an account enters a market
     event MarketEntered(IOToken oToken, address account);
@@ -119,11 +113,6 @@ contract Comptroller is
 
     /// @notice Emitted when VIX rewards are being claimed for a user
     event VixClaimed(address recipient, uint256 amount);
-
-    /// @notice Emitted when VIX address changes
-    event VixAddressSet(address vix);
-    /// @notice Emitted when boostmanager address changes
-    event BoostManagerSet(address boostmanager);
 
     bool public constant override isComptroller = true;
 
@@ -260,7 +249,7 @@ contract Comptroller is
         /* Get sender tokensHeld and amountOwed underlying from the oToken */
         (uint256 oErr, uint256 tokensHeld, uint256 amountOwed, ) = oToken
             .getAccountSnapshot(msg.sender);
-        require(oErr == 0, "exitMarket: getAccountSnapshot failed"); // semi-opaque error code
+        require(oErr == 0, "getAccountSnapshot failed"); // semi-opaque error code
 
         /* Fail if the sender has a borrow balance */
         if (amountOwed != 0) {
@@ -353,31 +342,6 @@ contract Comptroller is
         updateAndDistributeSupplierRewardsForToken(oToken, minter);
 
         return uint256(Error.NO_ERROR);
-    }
-
-    /**
-     * @notice Validates mint and reverts on rejection. May emit logs.
-     * @param oToken Asset being minted
-     * @param minter The address minting the tokens
-     * @param actualMintAmount The amount of the underlying asset being minted
-     * @param mintTokens The number of tokens being minted
-     */
-    function mintVerify(
-        address oToken,
-        address minter,
-        uint256 actualMintAmount,
-        uint256 mintTokens
-    ) external override {
-        // Shh - currently unused
-        oToken;
-        minter;
-        actualMintAmount;
-        mintTokens;
-
-        // Shh - we don't ever want this hook to be marked pure
-        if (false) {
-            maxAssets = maxAssets;
-        }
     }
 
     /**
@@ -484,9 +448,9 @@ contract Comptroller is
             require(msg.sender == oToken, "sender must be oToken");
 
             // attempt to add borrower to the market
-            Error err = addToMarketInternal(IOToken(msg.sender), borrower);
-            if (err != Error.NO_ERROR) {
-                return uint256(err);
+            Error addErr = addToMarketInternal(IOToken(msg.sender), borrower);
+            if (addErr != Error.NO_ERROR) {
+                return uint256(addErr);
             }
 
             // it should be impossible to break the important invariant
@@ -532,28 +496,6 @@ contract Comptroller is
     }
 
     /**
-     * @notice Validates borrow and reverts on rejection. May emit logs.
-     * @param oToken Asset whose underlying is being borrowed
-     * @param borrower The address borrowing the underlying
-     * @param borrowAmount The amount of the underlying asset requested to borrow
-     */
-    function borrowVerify(
-        address oToken,
-        address borrower,
-        uint256 borrowAmount
-    ) external override {
-        // Shh - currently unused
-        oToken;
-        borrower;
-        borrowAmount;
-
-        // Shh - we don't ever want this hook to be marked pure
-        if (false) {
-            maxAssets = maxAssets;
-        }
-    }
-
-    /**
      * @notice Checks if the account should be allowed to repay a borrow in the given market
      * @param oToken The market to verify the repay against
      * @param payer The account which would repay the asset
@@ -581,33 +523,6 @@ contract Comptroller is
         updateAndDistributeBorrowerRewardsForToken(oToken, borrower);
 
         return uint256(Error.NO_ERROR);
-    }
-
-    /**
-     * @notice Validates repayBorrow and reverts on rejection. May emit logs.
-     * @param oToken Asset being repaid
-     * @param payer The address repaying the borrow
-     * @param borrower The address of the borrower
-     * @param actualRepayAmount The amount of underlying being repaid
-     */
-    function repayBorrowVerify(
-        address oToken,
-        address payer,
-        address borrower,
-        uint256 actualRepayAmount,
-        uint256 borrowerIndex
-    ) external {
-        // Shh - currently unused
-        oToken;
-        payer;
-        borrower;
-        actualRepayAmount;
-        borrowerIndex;
-
-        // Shh - we don't ever want this hook to be marked pure
-        if (false) {
-            maxAssets = maxAssets;
-        }
     }
 
     /**
@@ -709,36 +624,6 @@ contract Comptroller is
     }
 
     /**
-     * @notice Validates liquidateBorrow and reverts on rejection. May emit logs.
-     * @param oTokenBorrowed Asset which was borrowed by the borrower
-     * @param oTokenCollateral Asset which was used as collateral and will be seized
-     * @param liquidator The address repaying the borrow and seizing the collateral
-     * @param borrower The address of the borrower
-     * @param actualRepayAmount The amount of underlying being repaid
-     */
-    function liquidateBorrowVerify(
-        address oTokenBorrowed,
-        address oTokenCollateral,
-        address liquidator,
-        address borrower,
-        uint256 actualRepayAmount,
-        uint256 seizeTokens
-    ) external {
-        // Shh - currently unused
-        oTokenBorrowed;
-        oTokenCollateral;
-        liquidator;
-        borrower;
-        actualRepayAmount;
-        seizeTokens;
-
-        // Shh - we don't ever want this hook to be marked pure
-        if (false) {
-            maxAssets = maxAssets;
-        }
-    }
-
-    /**
      * @notice Checks if the seizing of assets should be allowed to occur
      * @param oTokenCollateral Asset which was used as collateral and will be seized
      * @param oTokenBorrowed Asset which was borrowed by the borrower
@@ -784,34 +669,6 @@ contract Comptroller is
     }
 
     /**
-     * @notice Validates seize and reverts on rejection. May emit logs.
-     * @param oTokenCollateral Asset which was used as collateral and will be seized
-     * @param oTokenBorrowed Asset which was borrowed by the borrower
-     * @param liquidator The address repaying the borrow and seizing the collateral
-     * @param borrower The address of the borrower
-     * @param seizeTokens The number of collateral tokens to seize
-     */
-    function seizeVerify(
-        address oTokenCollateral,
-        address oTokenBorrowed,
-        address liquidator,
-        address borrower,
-        uint256 seizeTokens
-    ) external override {
-        // Shh - currently unused
-        oTokenCollateral;
-        oTokenBorrowed;
-        liquidator;
-        borrower;
-        seizeTokens;
-
-        // Shh - we don't ever want this hook to be marked pure
-        if (false) {
-            maxAssets = maxAssets;
-        }
-    }
-
-    /**
      * @notice Checks if the account should be allowed to transfer tokens in the given market
      * @param oToken The market to verify the transfer against
      * @param src The account which sources the tokens
@@ -841,31 +698,6 @@ contract Comptroller is
         distributeSupplierReward(oToken, dst);
 
         return uint256(Error.NO_ERROR);
-    }
-
-    /**
-     * @notice Validates transfer and reverts on rejection. May emit logs.
-     * @param oToken Asset being transferred
-     * @param src The account which sources the tokens
-     * @param dst The account which receives the tokens
-     * @param transferTokens The number of oTokens to transfer
-     */
-    function transferVerify(
-        address oToken,
-        address src,
-        address dst,
-        uint256 transferTokens
-    ) external override {
-        // Shh - currently unused
-        oToken;
-        src;
-        dst;
-        transferTokens;
-
-        // Shh - we don't ever want this hook to be marked pure
-        if (false) {
-            maxAssets = maxAssets;
-        }
     }
 
     /*** Liquidity/Liquidation Calculations ***/
@@ -1338,8 +1170,6 @@ contract Comptroller is
             collateralFactorMantissa: 0
         });
 
-        emit MarketAutoCollateralized(_autoCollaterize);
-
         for (uint i = 0; i < allMarkets.length; i ++) {
             require(allMarkets[i] != IOToken(oToken), "market already added");
         }
@@ -1570,7 +1400,7 @@ contract Comptroller is
         uint256 supplySpeed,
         uint256 borrowSpeed
     ) internal {
-        require(markets[address(oToken)].isListed, "0VIX market is not listed");
+        require(markets[address(oToken)].isListed, "market is not listed");
 
         if (rewardSupplySpeeds[address(oToken)] != supplySpeed) {
             // Supply speed updated so let's update supply state to ensure that
@@ -1801,12 +1631,10 @@ contract Comptroller is
      */
 
     function claimReward(address holder) public returns (uint256) {
-        for (uint256 i = 0; i < allMarkets.length; i++) {
-            IOToken oToken = allMarkets[i];
-            require(markets[address(oToken)].isListed, "market must be listed");
-            updateAndDistributeBorrowerRewardsForToken(address(oToken), holder);
-            updateAndDistributeSupplierRewardsForToken(address(oToken), holder);
-        }
+        address[] memory holders = new address[](1);
+        holders[0] = holder;
+        claimRewards(holders, allMarkets, true, true);
+        
         uint256 totalReward = rewardAccrued[holder];
         rewardAccrued[holder] = grantRewardInternal(holder, totalReward);
         return totalReward;
@@ -1818,7 +1646,6 @@ contract Comptroller is
      * @param oTokens The list of markets to claim Reward in
      */
     function claimRewards(address holder, IOToken[] memory oTokens) public {
-        // todo: undo _
         address[] memory holders = new address[](1);
         holders[0] = holder;
         claimRewards(holders, oTokens, true, true);
@@ -1828,34 +1655,18 @@ contract Comptroller is
      * @notice Claim all reward accrued by the holders
      * @param holders The addresses to claim Reward for
      * @param oTokens The list of markets to claim Reward in
-     * @param borrowers Whether or not to claim Reward earned by borrowing
-     * @param suppliers Whether or not to claim Reward earned by supplying
      */
     function claimRewards(
         address[] memory holders,
         IOToken[] memory oTokens,
-        bool borrowers,
-        bool suppliers
+        bool,
+        bool
     ) public {
         for (uint256 i = 0; i < oTokens.length; i++) {
-            IOToken oToken = oTokens[i];
-            require(markets[address(oToken)].isListed, "market must be listed");
-            if (borrowers) {
-                Exp memory borrowIndex = Exp({mantissa: oToken.borrowIndex()});
-                updateRewardBorrowIndex(address(oToken), borrowIndex);
-                for (uint256 j = 0; j < holders.length; j++) {
-                    distributeBorrowerReward(
-                        address(oToken),
-                        holders[j],
-                        borrowIndex
-                    );
-                }
-            }
-            if (suppliers) {
-                updateRewardSupplyIndex(address(oToken));
-                for (uint256 j = 0; j < holders.length; j++) {
-                    distributeSupplierReward(address(oToken), holders[j]);
-                }
+            require(markets[address(oTokens[i])].isListed, "market must be listed");
+            for (uint256 j = 0; j < holders.length; j++) {
+                updateAndDistributeSupplierRewardsForToken(address(oTokens[i]), holders[j]);
+                updateAndDistributeBorrowerRewardsForToken(address(oTokens[i]), holders[j]);
             }
         }
         for (uint256 j = 0; j < holders.length; j++) {
@@ -1925,7 +1736,7 @@ contract Comptroller is
         require(
             numTokens == supplySpeeds.length &&
                 numTokens == borrowSpeeds.length,
-            "Comptroller::_setRewardSpeeds invalid input"
+            "_setRewardSpeeds invalid input"
         );
 
         for (uint256 i = 0; i < numTokens; ++i) {
@@ -2004,7 +1815,6 @@ contract Comptroller is
         require(newVixAddress != address(0), "no zero address allowed");
         require(vixAddress == address(0), "VIX already set");
         vixAddress = newVixAddress;
-        emit VixAddressSet(newVixAddress);
     }
 
     /**
@@ -2014,7 +1824,6 @@ contract Comptroller is
         require(newBoostManager != address(0), "no zero address allowed");
         require(address(boostManager) == address(0), "VIX already set");
         boostManager = IBoostManager(newBoostManager);
-        emit BoostManagerSet(newBoostManager);
     }
 
     function getBoostManager() external view override returns (address) {
@@ -2024,12 +1833,10 @@ contract Comptroller is
     function setRewardUpdater(address _rewardUpdater) public onlyAdmin {
         require(_rewardUpdater != address(0), "no zero address allowed");
         rewardUpdater = _rewardUpdater;
-        emit RewardUpdaterModified(_rewardUpdater);
     }
 
     function setAutoCollaterize(address market, bool flag) external onlyAdmin {
         markets[market].autoCollaterize = flag;
-        emit MarketAutoCollateralized(flag);
     }
 
     /**

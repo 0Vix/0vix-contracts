@@ -16,13 +16,11 @@ interface IComptroller {
     /*** Policy Hooks ***/
 
     function mintAllowed(address oToken, address minter, uint mintAmount) external returns (uint);
-    function mintVerify(address oToken, address minter, uint mintAmount, uint mintTokens) external;
 
     function redeemAllowed(address oToken, address redeemer, uint redeemTokens) external returns (uint);
     function redeemVerify(address oToken, address redeemer, uint redeemAmount, uint redeemTokens) external;
 
     function borrowAllowed(address oToken, address borrower, uint borrowAmount) external returns (uint);
-    function borrowVerify(address oToken, address borrower, uint borrowAmount) external;
 
     function repayBorrowAllowed(
         address oToken,
@@ -43,16 +41,8 @@ interface IComptroller {
         address liquidator,
         address borrower,
         uint seizeTokens) external returns (uint);
-        
-    function seizeVerify(
-        address oTokenCollateral,
-        address oTokenBorrowed,
-        address liquidator,
-        address borrower,
-        uint seizeTokens) external;
 
     function transferAllowed(address oToken, address src, address dst, uint transferTokens) external returns (uint);
-    function transferVerify(address oToken, address src, address dst, uint transferTokens) external;
 
     /*** Liquidity/Liquidation Calculations ***/
 

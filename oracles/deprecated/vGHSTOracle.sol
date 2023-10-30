@@ -1,12 +1,15 @@
 pragma solidity 0.8.4;
-import "./interfaces/AggregatorV3.sol";
+import "../interfaces/AggregatorV3.sol";
 
 error NotImplemented();
 
-contract gDAIOracle is AggregatorV3 {
-    AggregatorV3 daiFeed =
-        AggregatorV3(0x4746DeC9e833A82EC7C2C1356372CcF2cfcD2F3D);
-    address gDAI = 0x91993f2101cc758D0dEB7279d41e880F7dEFe827;
+contract VGHSTOracle is AggregatorV3 {
+    // GHST Feed
+    AggregatorV3 constant ghstFeed =
+        AggregatorV3(0xDD229Ce42f11D8Ee7fFf29bDB71C7b81352e11be);
+
+    // vGHST Feed
+    address constant vGHST = 0x51195e21BDaE8722B29919db56d95Ef51FaecA6C;
 
     constructor() {}
 
@@ -27,40 +30,43 @@ contract gDAIOracle is AggregatorV3 {
         override
         returns (uint80, int256, uint256, uint256, uint80)
     {
-        (, bytes memory data) = gDAI.staticcall(
-            abi.encodeWithSignature("shareToAssetsPrice()")
+        (bool success, bytes memory data) = vGHST.staticcall(
+            abi.encodeWithSignature("convertVGHST(uint256)", 1 ether)
         );
 
-        (, bytes memory decimalsData) = gDAI.staticcall(
+        require(success, "vGHST#convertVGHST() reverted");
+
+        (, bytes memory decimalsData) = vGHST.staticcall(
             abi.encodeWithSignature("decimals()")
         );
 
-        uint8 gDAIDecimals = uint8(toUint256(decimalsData));
+        uint8 vGHSTDecimals = uint8(toUint256(decimalsData));
         (
             uint80 roundId,
             int256 answer,
             uint256 startedAt,
             uint256 updatedAt,
             uint80 answeredInRound
-        ) = daiFeed.latestRoundData();
-
+        ) = ghstFeed.latestRoundData();
+ 
         int256 price = int(
-            (toUint256(data) * uint(answer)) / 10 ** gDAIDecimals
+            (toUint256(data) * uint(answer)) / 10 ** vGHSTDecimals
         );
+
 
         return (roundId, price, startedAt, updatedAt, answeredInRound);
     }
 
     function decimals() external view override returns (uint8) {
-        return daiFeed.decimals();
+        return ghstFeed.decimals();
     }
 
     function description() external pure override returns (string memory) {
-        return "0VIX gDAI Oracle";
+        return "0VIX vGHST Oracle";
     }
 
     function version() external view override returns (uint256) {
-        return daiFeed.version();
+        return ghstFeed.version();
     }
 
     // UTILS

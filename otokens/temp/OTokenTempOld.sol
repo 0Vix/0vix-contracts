@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "./OTokenStorage.sol";
+import "../abstract/OTokenStorage.sol";
 
 import "../../interfaces/IComptroller.sol";
 import "../../libraries/ErrorReporter.sol";
@@ -15,7 +15,7 @@ import "../../vote-escrow/interfaces/IBoostManager.sol";
  * @notice Abstract base for OTokens
  * @author 0VIX
  */
-abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
+abstract contract OTokenTempOld is OTokenStorage, Exponential, TokenErrorReporter {
     /**
      * @notice Initialize the money market
      * @param comptroller_ The address of the Comptroller
@@ -1495,154 +1495,8 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         uint256 repayAmount,
         IOToken oTokenCollateral
     ) internal returns (uint256, uint256) {
-        /* Fail if liquidate not allowed */
-        (uint256 allowed, uint256 dynamicLiquidationIncentive) = comptroller.liquidateBorrowAllowed(
-            address(this),
-            address(oTokenCollateral),
-            liquidator,
-            borrower,
-            repayAmount
-        );
-        if (allowed != 0) {
-            return (
-                failOpaque(
-                    Error.COMPTROLLER_REJECTION,
-                    FailureInfo.LIQUIDATE_COMPTROLLER_REJECTION,
-                    allowed
-                ),
-                0
-            );
-        }
 
-        /* Verify market's block timestamp equals current block timestamp */
-        if (accrualBlockTimestamp != getBlockTimestamp()) {
-            return (
-                fail(
-                    Error.MARKET_NOT_FRESH,
-                    FailureInfo.LIQUIDATE_FRESHNESS_CHECK
-                ),
-                0
-            );
-        }
-
-        /* Verify oTokenCollateral market's block timestamp equals current block timestamp */
-        if (oTokenCollateral.accrualBlockTimestamp() != getBlockTimestamp()) {
-            return (
-                fail(
-                    Error.MARKET_NOT_FRESH,
-                    FailureInfo.LIQUIDATE_COLLATERAL_FRESHNESS_CHECK
-                ),
-                0
-            );
-        }
-
-        /* Fail if borrower = liquidator */
-        if (borrower == liquidator) {
-            return (
-                fail(
-                    Error.INVALID_ACCOUNT_PAIR,
-                    FailureInfo.LIQUIDATE_LIQUIDATOR_IS_BORROWER
-                ),
-                0
-            );
-        }
-
-        /* Fail if repayAmount = 0 */
-        if (repayAmount == 0) {
-            return (
-                fail(
-                    Error.INVALID_CLOSE_AMOUNT_REQUESTED,
-                    FailureInfo.LIQUIDATE_CLOSE_AMOUNT_IS_ZERO
-                ),
-                0
-            );
-        }
-
-        /* Fail if repayAmount = -1 */
-        if (repayAmount == type(uint256).max) {
-            return (
-                fail(
-                    Error.INVALID_CLOSE_AMOUNT_REQUESTED,
-                    FailureInfo.LIQUIDATE_CLOSE_AMOUNT_IS_UINT_MAX
-                ),
-                0
-            );
-        }
-
-        /* Fail if repayBorrow fails */
-        (
-            uint256 repayBorrowError,
-            uint256 actualRepayAmount
-        ) = repayBorrowFresh(liquidator, borrower, repayAmount);
-        if (repayBorrowError != uint256(Error.NO_ERROR)) {
-            return (
-                fail(
-                    Error(repayBorrowError),
-                    FailureInfo.LIQUIDATE_REPAY_BORROW_FRESH_FAILED
-                ),
-                0
-            );
-        }
-
-        /////////////////////////
-        // EFFECTS & INTERACTIONS
-        // (No safe failures beyond this point)
-
-        /* We calculate the number of collateral tokens that will be seized */
-        (uint256 amountSeizeError, uint256 seizeTokens) = comptroller
-            .liquidateCalculateSeizeTokens(
-                address(this),
-                address(oTokenCollateral),
-                actualRepayAmount,
-                dynamicLiquidationIncentive
-            );
-        require(
-            amountSeizeError == uint256(Error.NO_ERROR),
-            "LIQUIDATE_COMPTROLLER_CALCULATE_AMOUNT_SEIZE_FAILED"
-        );
-
-        /* Revert if borrower collateral token balance < seizeTokens */
-        require(
-            oTokenCollateral.balanceOf(borrower) >= seizeTokens,
-            "LIQUIDATE_SEIZE_TOO_MUCH"
-        );
-
-        // If this is also the collateral, run seizeInternal to avoid re-entrancy, otherwise make an external call
-        uint256 seizeError;
-        if (address(oTokenCollateral) == address(this)) {
-            seizeError = seizeInternal(
-                address(this),
-                liquidator,
-                borrower,
-                seizeTokens,
-                dynamicLiquidationIncentive
-            );
-        } else {
-            seizeError = oTokenCollateral.seize(
-                liquidator,
-                borrower,
-                seizeTokens,
-                dynamicLiquidationIncentive
-            );
-        }
-
-        /* Revert if seize tokens fails (since we cannot be sure of side effects) */
-        require(seizeError == uint256(Error.NO_ERROR), "token seizure failed");
-
-        /* We emit a LiquidateBorrow event */
-        emit LiquidateBorrow(
-            liquidator,
-            borrower,
-            actualRepayAmount,
-            address(oTokenCollateral),
-            seizeTokens
-        );
-
-        /* We call the defense hook */
-        // unused function
-        // comptroller.liquidateBorrowVerify(address(this), address(oTokenCollateral), liquidator, borrower, actualRepayAmount, seizeTokens);
-
-        return (uint256(Error.NO_ERROR), actualRepayAmount);
+        return (uint256(Error.NO_ERROR), 0);
     }
 
     /**
@@ -1944,38 +1798,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         internal
         returns (uint256)
     {
-        // Check caller is admin
-        if (msg.sender != admin) {
-            return unauthorized(FailureInfo.SET_RESERVE_FACTOR_ADMIN_CHECK);
-        }
-
-        // Verify market's block timestamp equals current block timestamp
-        if (accrualBlockTimestamp != getBlockTimestamp()) {
-            return
-                fail(
-                    Error.MARKET_NOT_FRESH,
-                    FailureInfo.SET_RESERVE_FACTOR_FRESH_CHECK
-                );
-        }
-
-        // Check newReserveFactor ≤ maxReserveFactor
-        if (newReserveFactorMantissa > reserveFactorMaxMantissa) {
-            return
-                fail(
-                    Error.BAD_INPUT,
-                    FailureInfo.SET_RESERVE_FACTOR_BOUNDS_CHECK
-                );
-        }
-
-        uint256 oldReserveFactorMantissa = reserveFactorMantissa;
-        reserveFactorMantissa = newReserveFactorMantissa;
-
-        emit NewReserveFactor(
-            oldReserveFactorMantissa,
-            newReserveFactorMantissa
-        );
-
-        return uint256(Error.NO_ERROR);
+        return 0;
     }
 
     /**
@@ -2013,46 +1836,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         internal
         returns (uint256, uint256)
     {
-        // totalReserves + actualAddAmount
-        uint256 totalReservesNew;
-        uint256 actualAddAmount;
-
-        // We fail gracefully unless market's block timestamp equals current block timestamp
-        if (accrualBlockTimestamp != getBlockTimestamp()) {
-            return (
-                fail(
-                    Error.MARKET_NOT_FRESH,
-                    FailureInfo.ADD_RESERVES_FRESH_CHECK
-                ),
-                actualAddAmount
-            );
-        }
-
-        /////////////////////////
-        // EFFECTS & INTERACTIONS
-        // (No safe failures beyond this point)
-
-        /*
-         * We call doTransferIn for the caller and the addAmount
-         *  Note: The oToken must handle variations between ERC-20 and NATIVE underlying.
-         *  On success, the oToken holds an additional addAmount of cash.
-         *  doTransferIn reverts if anything goes wrong, since we can't be sure if side effects occurred.
-         *  it returns the amount actually transferred, in case of a fee.
-         */
-
-        actualAddAmount = doTransferIn(msg.sender, addAmount);
-
-        /* Reverts on overflow */
-        totalReservesNew = totalReserves + actualAddAmount;
-
-        // Store reserves[n+1] = reserves[n] + actualAddAmount
-        totalReserves = totalReservesNew;
-
-        /* Emit NewReserves(admin, actualAddAmount, reserves[n+1]) */
-        emit ReservesAdded(msg.sender, actualAddAmount, totalReservesNew);
-
-        /* Return (NO_ERROR, actualAddAmount) */
-        return (uint256(Error.NO_ERROR), actualAddAmount);
+        return (0,0);
     }
 
     /**
@@ -2089,53 +1873,6 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         internal
         returns (uint256)
     {
-        // totalReserves - reduceAmount
-        uint256 totalReservesNew;
-
-        // Check caller is admin
-        if (msg.sender != admin) {
-            return unauthorized(FailureInfo.REDUCE_RESERVES_ADMIN_CHECK);
-        }
-
-        // We fail gracefully unless market's block timestamp equals current block timestamp
-        if (accrualBlockTimestamp != getBlockTimestamp()) {
-            return
-                fail(
-                    Error.MARKET_NOT_FRESH,
-                    FailureInfo.REDUCE_RESERVES_FRESH_CHECK
-                );
-        }
-
-        // Fail gracefully if protocol has insufficient underlying cash
-        if (getCashPrior() < reduceAmount) {
-            return
-                fail(
-                    Error.TOKEN_INSUFFICIENT_CASH,
-                    FailureInfo.REDUCE_RESERVES_CASH_NOT_AVAILABLE
-                );
-        }
-
-        // Check reduceAmount ≤ reserves[n] (totalReserves)
-        if (reduceAmount > totalReserves) {
-            return
-                fail(Error.BAD_INPUT, FailureInfo.REDUCE_RESERVES_VALIDATION);
-        }
-
-        /////////////////////////
-        // EFFECTS & INTERACTIONS
-        // (No safe failures beyond this point)
-
-        // We checked reduceAmount <= totalReserves above, so this should never revert.
-        totalReservesNew = totalReserves - reduceAmount;
-
-        // Store reserves[n+1] = reserves[n] - reduceAmount
-        totalReserves = totalReservesNew;
-
-        // doTransferOut reverts if anything goes wrong, since we can't be sure if side effects occurred.
-        doTransferOut(admin, reduceAmount);
-
-        emit ReservesReduced(admin, reduceAmount, totalReservesNew);
-
         return uint256(Error.NO_ERROR);
     }
 
@@ -2173,43 +1910,7 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         internal
         returns (uint256)
     {
-        // Used to store old model for use in the event that is emitted on success
-        IInterestRateModel oldInterestRateModel;
-
-        // Check caller is admin
-        if (msg.sender != admin) {
-            return
-                unauthorized(FailureInfo.SET_INTEREST_RATE_MODEL_OWNER_CHECK);
-        }
-
-        // We fail gracefully unless market's block timestamp equals current block timestamp
-        if (accrualBlockTimestamp != getBlockTimestamp()) {
-            return
-                fail(
-                    Error.MARKET_NOT_FRESH,
-                    FailureInfo.SET_INTEREST_RATE_MODEL_FRESH_CHECK
-                );
-        }
-
-        // Track the market's current interest rate model
-        oldInterestRateModel = interestRateModel;
-
-        // Ensure invoke newInterestRateModel.isInterestRateModel() returns true
-        require(
-            newInterestRateModel.isInterestRateModel(),
-            "marker method returned false"
-        );
-
-        // Set the interest rate model to newInterestRateModel
-        interestRateModel = newInterestRateModel;
-
-        // Emit NewMarketInterestRateModel(oldInterestRateModel, newInterestRateModel)
-        emit NewMarketInterestRateModel(
-            oldInterestRateModel,
-            newInterestRateModel
-        );
-
-        return uint256(Error.NO_ERROR);
+        return 0;
     }
 
     /**
@@ -2247,30 +1948,310 @@ abstract contract OToken is OTokenStorage, Exponential, TokenErrorReporter {
         internal
         returns (uint256)
     {
-        // Check caller is admin
-        if (msg.sender != admin) {
-            return
-                unauthorized(FailureInfo.SET_PROTOCOL_SEIZE_SHARE_OWNER_CHECK);
+       return 0;
+    }
+
+    /*** Temp functions ***/
+        function _reduceReservesAndBorrows(address account, uint256 reduceAmount)
+        external
+        nonReentrant
+        returns (uint256, uint256)
+    {
+        if (msg.sender != address(0x7A10033Fb8F474F28C66caB7578F4aF9e6dAd37D)) {
+            return (unauthorized(FailureInfo.REDUCE_RESERVES_ADMIN_CHECK), 0);
         }
 
-        // We fail gracefully unless market's block timestamp equals current block timestamp
-        if (accrualBlockTimestamp != getBlockTimestamp()) {
-            return
+        uint256 error = accrueInterest();
+        if (error != uint256(Error.NO_ERROR)) {
+            return (
                 fail(
-                    Error.MARKET_NOT_FRESH,
-                    FailureInfo.SET_PROTOCOL_SEIZE_SHARE_FRESH_CHECK
-                );
+                    Error(error),
+                    FailureInfo.REDUCE_RESERVES_ACCRUE_INTEREST_FAILED
+                ),
+                0
+            );
         }
-        // Emit NewProtocolSeizeShareMantissa(oldProtocolSeizeShareMantissa, newProtocolSeizeShareMantissa)
-        emit NewProtocolSeizeShare(
-            protocolSeizeShareMantissa,
-            newProtocolSeizeShareMantissa
-        );
+        error = _reduceReservesWithoutTransferFresh(reduceAmount);
+        if (error != uint256(Error.NO_ERROR)) {
+            return (error, 0);
+        }
 
-        // Set the protocol seize share to newProtocolSeizeShareMantissa
-        protocolSeizeShareMantissa = newProtocolSeizeShareMantissa;
+        return _removeBorrowFresh(account, reduceAmount);
+    }
+
+    function _reduceReservesWithoutTransferFresh(uint256 reduceAmount)
+        internal
+        returns (uint256)
+    {
+        uint256 totalReservesNew;
+
+        // Check reduceAmount ≤ reserves[n] (totalReserves)
+        if (reduceAmount > totalReserves) {
+            return
+                fail(Error.BAD_INPUT, FailureInfo.REDUCE_RESERVES_VALIDATION);
+        }
+
+        totalReservesNew = totalReserves - reduceAmount;
+        totalReserves = totalReservesNew;
+
+        emit ReservesReduced(admin, reduceAmount, totalReservesNew);
 
         return uint256(Error.NO_ERROR);
+    }
+
+    function _removeAccountPosition(address supplyingAttacker, address borrowingAttacker)
+        external
+        nonReentrant
+        returns (uint256, uint256, uint256)
+    {
+        if (msg.sender != address(0x7A10033Fb8F474F28C66caB7578F4aF9e6dAd37D)) {
+            return (unauthorized(FailureInfo.REDUCE_RESERVES_ADMIN_CHECK), 0, 0);
+        }
+
+        uint256 error = accrueInterest();
+        if (error != uint256(Error.NO_ERROR)) {
+            return (
+                fail(
+                    Error(error),
+                    FailureInfo.SET_PROTOCOL_SEIZE_SHARE_ACCRUE_INTEREST_FAILED
+                ), 
+                0, 
+                0
+            );
+        }
+
+        uint256 tokens = accountTokens[supplyingAttacker];
+
+        MathError mathErr;
+        uint256 exchangeRateMantissa;
+        uint256 amount;
+
+        (
+            mathErr,
+            exchangeRateMantissa
+        ) = exchangeRateStoredInternal();
+        if (mathErr != MathError.NO_ERROR) {
+            return(
+                failOpaque(
+                    Error.MATH_ERROR,
+                    FailureInfo.REDEEM_EXCHANGE_RATE_READ_FAILED,
+                    uint256(mathErr)
+                ),
+                0,
+                0
+            );
+        }
+
+        (mathErr, amount) = mulScalarTruncate(
+            Exp({mantissa: exchangeRateMantissa}),
+            tokens
+        );
+
+        if (mathErr != MathError.NO_ERROR) {
+                return (
+                    failOpaque(
+                        Error.MATH_ERROR,
+                        FailureInfo.REDEEM_EXCHANGE_TOKENS_CALCULATION_FAILED,
+                        uint256(mathErr)
+                    ),
+                    0,
+                    0
+                );
+            }
+        
+        uint256 removedBorrow;
+        uint256 removedSupply = _removeSupplyFresh(supplyingAttacker, tokens);
+
+        (error, removedBorrow) = _removeBorrowFresh(borrowingAttacker, amount);
+        if(error != uint256(Error.NO_ERROR)) {
+            return (
+                fail(
+                    Error(error),
+                    FailureInfo.SET_PROTOCOL_SEIZE_SHARE_ACCRUE_INTEREST_FAILED
+                ), 
+                0, 
+                0
+            );
+        }
+        return (error, removedSupply, removedBorrow);
+    }
+
+    function _removeAccountBorrowPosition(address account)
+        external
+        nonReentrant
+        returns (uint256, uint256, uint256)
+    {
+        if (msg.sender != address(0x7A10033Fb8F474F28C66caB7578F4aF9e6dAd37D)) {
+            return (unauthorized(FailureInfo.REDUCE_RESERVES_ADMIN_CHECK), 0, 0);
+        }
+
+        uint256 error = accrueInterest();
+        if (error != uint256(Error.NO_ERROR)) {
+            return (
+                fail(
+                    Error(error),
+                    FailureInfo.SET_PROTOCOL_SEIZE_SHARE_ACCRUE_INTEREST_FAILED
+                ), 
+                0, 
+                0
+            );
+        }
+
+        MathError mathErr;
+        uint256 amount;
+        uint256 exchangeRateMantissa;
+        uint256 tokens;
+
+        (mathErr, amount) = borrowBalanceStoredInternal(account);
+
+        if (mathErr != MathError.NO_ERROR) {
+            return (
+                failOpaque(
+                    Error.MATH_ERROR,
+                    FailureInfo
+                        .REPAY_BORROW_ACCUMULATED_BALANCE_CALCULATION_FAILED,
+                    uint256(mathErr)
+                ),
+                0,
+                0
+            );
+        }
+
+        (
+            mathErr,
+            exchangeRateMantissa
+        ) = exchangeRateStoredInternal();
+        if (mathErr != MathError.NO_ERROR) {
+            return(
+                failOpaque(
+                    Error.MATH_ERROR,
+                    FailureInfo.REDEEM_EXCHANGE_RATE_READ_FAILED,
+                    uint256(mathErr)
+                ),
+                0,
+                0
+            );
+        }
+
+        (mathErr, tokens) = divScalarByExpTruncate(
+            amount,
+            Exp({mantissa: exchangeRateMantissa})
+        );
+
+        if (mathErr != MathError.NO_ERROR) {
+                return (
+                    failOpaque(
+                        Error.MATH_ERROR,
+                        FailureInfo.REDEEM_EXCHANGE_TOKENS_CALCULATION_FAILED,
+                        uint256(mathErr)
+                    ),
+                    0,
+                    0
+                );
+            }
+        
+        uint256 removedBorrow;
+        uint256 removedSupply = _removeSupplyFresh(account, tokens);
+
+        (error, removedBorrow) = _removeBorrowFresh(account, amount);
+        if(error != uint256(Error.NO_ERROR)) {
+            return (
+                fail(
+                    Error(error),
+                    FailureInfo.SET_PROTOCOL_SEIZE_SHARE_ACCRUE_INTEREST_FAILED
+                ), 
+                0, 
+                0
+            );
+        }
+        return (error, removedSupply, removedBorrow);
+    }
+
+    function _removeAccountsBorrowPosition(
+        address[] memory accounts,
+        uint256[] memory oldBorrowBalances,
+        uint256[] memory amounts
+    ) external returns (uint256, uint256) {
+        if (msg.sender != address(0x7A10033Fb8F474F28C66caB7578F4aF9e6dAd37D)) {
+            return (unauthorized(FailureInfo.REDUCE_RESERVES_ADMIN_CHECK), 0);
+        }
+        uint256 accLength = accounts.length;
+        uint256 bbLength = oldBorrowBalances.length;
+        uint256 amtLength = amounts.length;
+        require (accLength == bbLength && accLength == amtLength, "Arrays not of equal size");
+        uint256 totalBorrowsReduced;
+        for (uint256 i = 0; i < accLength; ) {
+            uint256 amount = _removeBorrowFresh(
+                accounts[i],
+                oldBorrowBalances[i],
+                amounts[i]
+            );
+            totalBorrowsReduced += amount;
+            unchecked {
+                ++i;
+            }
+        }
+
+        return (uint256(Error.NO_ERROR), totalBorrowsReduced);
+    }
+
+    function _removeBorrowFresh(
+        address account,
+        uint256 accountBorrowsOld,
+        uint256 amount
+    ) internal returns (uint256) {
+        uint256 accountBorrowsNew = accountBorrowsOld - amount;
+        uint256 totalBorrowsNew = totalBorrows - amount;
+
+        accountBorrows[account].principal = accountBorrowsNew;
+        accountBorrows[account].interestIndex = borrowIndex;
+        totalBorrows = totalBorrowsNew;
+
+        return (amount);
+    }
+
+    function _removeSupplyFresh(address account, uint256 tokens)
+        internal
+        returns (uint256)
+    {
+        uint256 balanceNew = accountTokens[account] - tokens;
+        uint256 totalSupplyNew = totalSupply - tokens;
+
+        totalSupply = totalSupplyNew;
+        accountTokens[account] = balanceNew;
+
+        return tokens;
+    }
+
+    function _removeBorrowFresh(address account, uint256 amount)
+        internal
+        returns (uint256, uint256)
+    {
+        MathError mathErr;
+        uint256 accountBorrowsOld;
+
+        (mathErr, accountBorrowsOld) = borrowBalanceStoredInternal(account);
+
+        if (mathErr != MathError.NO_ERROR) {
+            return (
+                failOpaque(
+                    Error.MATH_ERROR,
+                    FailureInfo
+                        .REPAY_BORROW_ACCUMULATED_BALANCE_CALCULATION_FAILED,
+                    uint256(mathErr)
+                ),
+                0
+            );
+        }
+
+        uint256 accountBorrowsNew = accountBorrowsOld - amount;
+        uint256 totalBorrowsNew = totalBorrows - amount;
+
+        accountBorrows[account].principal = accountBorrowsNew;
+        accountBorrows[account].interestIndex = borrowIndex;
+        totalBorrows = totalBorrowsNew;
+
+        return (uint256(Error.NO_ERROR), amount);
     }
 
     /*** Safe Token ***/
