@@ -24,7 +24,7 @@ interface IUnitroller {
  * @notice Based on Compound's Comptroller with some changes inspired by BENQi.fi
  */
 contract Comptroller is
-    ComptrollerV7Storage,
+    ComptrollerV9Storage,
     ComptrollerErrorReporter,
     ExponentialNoError
 {
@@ -102,11 +102,8 @@ contract Comptroller is
     /// @notice Emitted when borrow cap for a oToken is changed
     event NewBorrowCap(IOToken indexed oToken, uint256 newBorrowCap);
 
-    /// @notice Emitted when borrow cap guardian is changed
-    event NewBorrowCapGuardian(
-        address oldBorrowCapGuardian,
-        address newBorrowCapGuardian
-    );
+    /// @notice Emitted when supply cap for a oToken is changed
+    event NewSupplyCap(IOToken indexed oToken, uint256 newSupplyCap);
 
     /// @notice Emitted when VIX is granted by admin
     event VixGranted(address recipient, uint256 amount);
@@ -191,10 +188,11 @@ contract Comptroller is
         uint256 len = oTokens.length;
 
         uint256[] memory results = new uint256[](len);
-        for (uint256 i = 0; i < len; i++) {
+        for (uint256 i; i < len;) {
             results[i] = uint256(
                 addToMarketInternal(IOToken(oTokens[i]), msg.sender)
             );
+            unchecked {++i;}
         }
 
         return results;
@@ -324,10 +322,37 @@ contract Comptroller is
     ) external override returns (uint256) {
         // Pausing is a very serious situation - we revert to sound the alarms
         mintAmount; // not used yet
-        require(!guardianPaused[oToken].mint, "mint is paused");
+        require(!guardianPaused[oToken].mint, "mint paused");
 
         if (!markets[oToken].isListed) {
             return uint256(Error.MARKET_NOT_LISTED);
+        }
+
+        uint256 supplyCap = supplyCaps[oToken];
+        // Supply cap of 0 corresponds to unlimited supplying
+        if (supplyCap != 0) {
+            uint256 reserves;
+            uint cash = IOToken(oToken).getCash();
+            // if native token, we decrease mintAmount (msg.value), because `msg.value` has already been transferred to the oNative contract. 
+            (, bytes memory underlyingData) = oToken.staticcall(
+                abi.encodeWithSignature("underlying()")
+            );
+            if(underlyingData.length == 0) {
+                cash -= mintAmount;
+            }
+            uint borrows = IOToken(oToken).totalBorrows();
+            // total reserves doesn't exist in the interface because it's a state variable
+            (, bytes memory reservesData) = oToken.staticcall(
+                abi.encodeWithSignature("totalReserves()")
+            );
+            assembly {
+                reserves := mload(add(reservesData, 0x20))
+            }
+
+            uint256 totalSupply = cash + borrows - reserves;
+            uint256 maxSupply = supplyCap - totalSupply;
+
+            require(mintAmount <= maxSupply, "supply cap reached");
         }
 
         // Sets an asset automatically as collateral if the user has no
@@ -356,7 +381,7 @@ contract Comptroller is
         address redeemer,
         uint256 redeemTokens
     ) external override returns (uint256) {
-        require(!guardianPaused[oToken].redeem, "redeem is paused");
+        require(!guardianPaused[oToken].redeem, "redeem paused");
 
         uint256 allowed = redeemAllowedInternal(oToken, redeemer, redeemTokens);
         if (allowed != uint256(Error.NO_ERROR)) {
@@ -422,7 +447,7 @@ contract Comptroller is
         redeemer;
 
         // Require tokens is zero or amount is also zero
-        require(redeemTokens != 0 || redeemAmount == 0, "redeemTokens zero");
+        require(redeemTokens != 0 || redeemAmount == 0, "redeem zero");
     }
 
     /**
@@ -438,7 +463,7 @@ contract Comptroller is
         uint256 borrowAmount
     ) external override returns (uint256) {
         // Pausing is a very serious situation - we revert to sound the alarms
-        require(!guardianPaused[oToken].borrow, "borrow is paused");
+        require(!guardianPaused[oToken].borrow, "borrow paused");
         if (!markets[oToken].isListed) {
             return uint256(Error.MARKET_NOT_LISTED);
         }
@@ -509,7 +534,7 @@ contract Comptroller is
         address borrower,
         uint256 repayAmount
     ) external override returns (uint256) {
-        require(!guardianPaused[oToken].repay, "repay is paused");
+        require(!guardianPaused[oToken].repay, "repay paused");
         // Shh - currently unused
         payer;
         borrower;
@@ -560,7 +585,7 @@ contract Comptroller is
         if (isDeprecated(IOToken(oTokenBorrowed))) {
             require(
                 borrowBalance >= repayAmount,
-                "Can not repay more than the total borrow"
+                "Can't repay >= total borrow"
             );
 
             dynamicLiquidationIncentiveMantissa = 1e18;
@@ -639,7 +664,7 @@ contract Comptroller is
         uint256 seizeTokens
     ) external override returns (uint256) {
         // Pausing is a very serious situation - we revert to sound the alarms
-        require(!seizeGuardianPaused, "seize is paused");
+        require(!seizeGuardianPaused, "seize paused");
 
         // Shh - currently unused
         seizeTokens;
@@ -683,7 +708,7 @@ contract Comptroller is
         uint256 transferTokens
     ) external override returns (uint256) {
         // Pausing is a very serious situation - we revert to sound the alarms
-        require(!transferGuardianPaused, "transfer is paused");
+        require(!transferGuardianPaused, "transfer paused");
 
         // Currently the only consideration is whether or not
         //  the src is allowed to redeem this many tokens
@@ -1218,8 +1243,8 @@ contract Comptroller is
         uint256[] calldata newBorrowCaps
     ) external {
         require(
-            msg.sender == admin || msg.sender == borrowCapGuardian,
-            "only admin or borrowCapGuardian"
+            msg.sender == admin,
+            "only admin"
         );
 
         uint256 numMarkets = oTokens.length;
@@ -1237,21 +1262,32 @@ contract Comptroller is
     }
 
     /**
-     * @notice Admin function to change the Borrow Cap Guardian
-     * @param newBorrowCapGuardian The address of the new Borrow Cap Guardian
+     * @notice Set the given supply caps for the given oToken markets. Supplying that brings max supply to or above supply cap will revert.
+     * @dev Admin or capGuardian function to set the supply caps. A supply cap of 0 corresponds to unlimited supplying.
+     * @param oTokens The addresses of the markets (tokens) to change the supply caps for
+     * @param newSupplyCaps The new supply cap values in underlying to be set. A value of 0 corresponds to unlimited supplying.
      */
-    function _setBorrowCapGuardian(address newBorrowCapGuardian)
-        external
-        onlyAdmin
-    {
-        // Save current value for inclusion in log
-        address oldBorrowCapGuardian = borrowCapGuardian;
+    function _setMarketSupplyCaps(
+        IOToken[] calldata oTokens,
+        uint256[] calldata newSupplyCaps
+    ) external {
+        require(
+            msg.sender == admin,
+            "only admin"
+        );
 
-        // Store borrowCapGuardian with value newBorrowCapGuardian
-        borrowCapGuardian = newBorrowCapGuardian;
+        uint256 numMarkets = oTokens.length;
+        uint256 numSupplyCaps = newSupplyCaps.length;
 
-        // Emit NewBorrowCapGuardian(OldBorrowCapGuardian, NewBorrowCapGuardian)
-        emit NewBorrowCapGuardian(oldBorrowCapGuardian, newBorrowCapGuardian);
+        require(
+            numMarkets != 0 && numMarkets == numSupplyCaps,
+            "invalid input"
+        );
+
+        for (uint256 i = 0; i < numMarkets; i++) {
+            supplyCaps[address(oTokens[i])] = newSupplyCaps[i];
+            emit NewSupplyCap(oTokens[i], newSupplyCaps[i]);
+        }
     }
 
     /**
@@ -1286,17 +1322,17 @@ contract Comptroller is
     function onlyAdminOrGuardian() internal view {
         require(
             msg.sender == admin || msg.sender == pauseGuardian,
-            "only pause guardian and admin"
+            "only guardian/admin"
         );
     }
 
     function _setMintPaused(IOToken oToken, bool state) public returns (bool) {
         require(
             markets[address(oToken)].isListed,
-            "cannot pause: market not listed"
+            "cannot pause: not listed"
         );
         onlyAdminOrGuardian();
-        require(msg.sender == admin || state, "only admin can unpause");
+        require(msg.sender == admin || state, "only admin");
 
         guardianPaused[address(oToken)].mint = state;
         emit ActionPaused(oToken, "Mint", state);
@@ -1309,10 +1345,10 @@ contract Comptroller is
     ) public returns (bool) {
         require(
             markets[address(oToken)].isListed,
-            "cannot pause: market not listed"
+            "cannot pause: not listed"
         );
         onlyAdminOrGuardian();
-        require(msg.sender == admin || state, "only admin can unpause");
+        require(msg.sender == admin || state, "only admin");
 
         guardianPaused[address(oToken)].borrow = state;
         emit ActionPaused(oToken, "Borrow", state);
@@ -1325,10 +1361,10 @@ contract Comptroller is
     ) public returns (bool) {
         require(
             markets[address(oToken)].isListed,
-            "cannot pause: market not listed"
+            "cannot pause: not listed"
         );
         onlyAdminOrGuardian();
-        require(msg.sender == admin || state, "only admin can unpause");
+        require(msg.sender == admin || state, "only admin");
 
         guardianPaused[address(oToken)].redeem = state;
         emit ActionPaused(oToken, "Redeem", state);
@@ -1341,10 +1377,10 @@ contract Comptroller is
     ) public returns (bool) {
         require(
             markets[address(oToken)].isListed,
-            "cannot pause: market not listed"
+            "cannot pause: not listed"
         );
         onlyAdminOrGuardian();
-        require(msg.sender == admin || state, "only admin can unpause");
+        require(msg.sender == admin || state, "only admin");
 
         guardianPaused[address(oToken)].repay = state;
         emit ActionPaused(oToken, "Repay", state);
@@ -1353,7 +1389,7 @@ contract Comptroller is
 
     function _setTransferPaused(bool state) public returns (bool) {
         onlyAdminOrGuardian();
-        require(msg.sender == admin || state, "only admin can unpause");
+        require(msg.sender == admin || state, "only admin");
 
         transferGuardianPaused = state;
         emit ActionPausedGlobally("Transfer", state);
@@ -1362,7 +1398,7 @@ contract Comptroller is
 
     function _setSeizePaused(bool state) public returns (bool) {
         onlyAdminOrGuardian();
-        require(msg.sender == admin || state, "only admin can unpause");
+        require(msg.sender == admin || state, "only admin");
 
         seizeGuardianPaused = state;
         emit ActionPausedGlobally("Seize", state);
@@ -1372,11 +1408,11 @@ contract Comptroller is
     function _become(IUnitroller unitroller) public {
         require(
             msg.sender == unitroller.admin(),
-            "only unitroller admin can _become"
+            "only unitroller admin"
         );
         require(
             unitroller._acceptImplementation() == 0,
-            "change not authorized"
+            "not authorized"
         );
     }
 
@@ -1400,7 +1436,7 @@ contract Comptroller is
         uint256 supplySpeed,
         uint256 borrowSpeed
     ) internal {
-        require(markets[address(oToken)].isListed, "market is not listed");
+        require(markets[address(oToken)].isListed, "not listed");
 
         if (rewardSupplySpeeds[address(oToken)] != supplySpeed) {
             // Supply speed updated so let's update supply state to ensure that
@@ -1625,31 +1661,31 @@ contract Comptroller is
         }
     }
 
-    /**
-     * @notice Claim all the reward accrued by holder in all markets
-     * @param holder The address to claim Reward for
-     */
+    // /**
+    //  * @notice Claim all the reward accrued by holder in all markets
+    //  * @param holder The address to claim Reward for
+    //  */
 
-    function claimReward(address holder) public returns (uint256) {
-        address[] memory holders = new address[](1);
-        holders[0] = holder;
-        claimRewards(holders, allMarkets, true, true);
+    // function claimReward(address holder) public returns (uint256) {
+    //     address[] memory holders = new address[](1);
+    //     holders[0] = holder;
+    //     claimRewards(holders, allMarkets, true, true);
         
-        uint256 totalReward = rewardAccrued[holder];
-        rewardAccrued[holder] = grantRewardInternal(holder, totalReward);
-        return totalReward;
-    }
+    //     uint256 totalReward = rewardAccrued[holder];
+    //     rewardAccrued[holder] = grantRewardInternal(holder, totalReward);
+    //     return totalReward;
+    // }
 
-    /**
-     * @notice Claim all the reward accrued by holder in the specified markets
-     * @param holder The address to claim Reward for
-     * @param oTokens The list of markets to claim Reward in
-     */
-    function claimRewards(address holder, IOToken[] memory oTokens) public {
-        address[] memory holders = new address[](1);
-        holders[0] = holder;
-        claimRewards(holders, oTokens, true, true);
-    }
+    // /**
+    //  * @notice Claim all the reward accrued by holder in the specified markets
+    //  * @param holder The address to claim Reward for
+    //  * @param oTokens The list of markets to claim Reward in
+    //  */
+    // function claimRewards(address holder, IOToken[] memory oTokens) public {
+    //     address[] memory holders = new address[](1);
+    //     holders[0] = holder;
+    //     claimRewards(holders, oTokens, true, true);
+    // }
 
     /**
      * @notice Claim all reward accrued by the holders
@@ -1662,18 +1698,23 @@ contract Comptroller is
         bool,
         bool
     ) public {
-        for (uint256 i = 0; i < oTokens.length; i++) {
-            require(markets[address(oTokens[i])].isListed, "market must be listed");
-            for (uint256 j = 0; j < holders.length; j++) {
+        uint256 oTokenLength = oTokens.length;
+        uint256 holdersLength = holders.length;
+        for (uint256 i; i < oTokenLength;) {
+            require(markets[address(oTokens[i])].isListed, "must be listed");
+            for (uint256 j; j < holdersLength;) {
                 updateAndDistributeSupplierRewardsForToken(address(oTokens[i]), holders[j]);
                 updateAndDistributeBorrowerRewardsForToken(address(oTokens[i]), holders[j]);
+                unchecked {++j;}
             }
+            unchecked {++i;}
         }
-        for (uint256 j = 0; j < holders.length; j++) {
+        for (uint256 j; j < holdersLength;) {
             rewardAccrued[holders[j]] = grantRewardInternal(
                 holders[j],
                 rewardAccrued[holders[j]]
             );
+            unchecked {++j;}
         }
     }
 
@@ -1710,7 +1751,7 @@ contract Comptroller is
      * @param amount The amount of Reward to (possibly) transfer
      */
     function _grantReward(address recipient, uint256 amount) public {
-        require(adminOrInitializing(), "only admin can grant reward");
+        require(adminOrInitializing(), "only admin");
         uint256 amountLeft = grantRewardInternal(recipient, amount);
         require(amountLeft == 0, "insufficient token for grant");
         emit VixGranted(recipient, amount);
@@ -1729,51 +1770,52 @@ contract Comptroller is
     ) public override {
         require(
             msg.sender == admin || msg.sender == rewardUpdater,
-            "only admin can set reward speed"
+            "only admin"
         );
 
         uint256 numTokens = oTokens.length;
         require(
             numTokens == supplySpeeds.length &&
                 numTokens == borrowSpeeds.length,
-            "_setRewardSpeeds invalid input"
+            "invalid input"
         );
 
-        for (uint256 i = 0; i < numTokens; ++i) {
+        for (uint256 i; i < numTokens;) {
             setRewardSpeedInternal(
                 IOToken(oTokens[i]),
                 supplySpeeds[i],
                 borrowSpeeds[i]
             );
+            unchecked { ++i;}
         }
     }
 
-    /**
-     * @notice Set Reward speed for a single contributor
-     * @param contributor The contributor whose Reward speed to update
-     * @param rewardSpeed New Reward speed for contributor
-     */
-    function _setContributorRewardSpeed(
-        address contributor,
-        uint256 rewardSpeed
-    ) public {
-        require(
-            msg.sender == admin || msg.sender == rewardUpdater,
-            "only admin can set reward speed"
-        );
+    // /**
+    // * @notice Set Reward speed for a single contributor
+    // * @param contributor The contributor whose Reward speed to update
+    // * @param rewardSpeed New Reward speed for contributor
+    // */
+    // function _setContributorRewardSpeed(
+    // address contributor,
+    // uint256 rewardSpeed
+    // ) public {
+    // require(
+    // msg.sender == admin || msg.sender == rewardUpdater,
+    // "only admin can set reward speed"
+    //     );
 
-        // note that Reward speed could be set to 0 to halt liquidity rewards for a contributor
-        updateContributorRewards(contributor);
-        if (rewardSpeed == 0) {
-            // release storage
-            delete lastContributorTimestamp[contributor];
-        } else {
-            lastContributorTimestamp[contributor] = getTimestamp();
-        }
-        rewardContributorSpeeds[contributor] = rewardSpeed;
+    // // note that Reward speed could be set to 0 to halt liquidity rewards for a contributor
+    // updateContributorRewards(contributor);
+    // if (rewardSpeed == 0) {
+    // // release storage
+    // delete lastContributorTimestamp[contributor];
+    // } else {
+    // lastContributorTimestamp[contributor] = getTimestamp();
+    // }
+    //     rewardContributorSpeeds[contributor] = rewardSpeed;
 
-        emit ContributorRewardSpeedUpdated(contributor, rewardSpeed);
-    }
+    // emit ContributorRewardSpeedUpdated(contributor, rewardSpeed);
+    // }
 
     /**
      * @notice Return all of the markets
@@ -1814,7 +1856,7 @@ contract Comptroller is
     function setVixAddress(address newVixAddress) public onlyAdmin {
         require(newVixAddress != address(0), "no zero address allowed");
         require(vixAddress == address(0), "VIX already set");
-        vixAddress = newVixAddress;
+                vixAddress = newVixAddress;
     }
 
     /**
@@ -1823,7 +1865,7 @@ contract Comptroller is
     function setBoostManager(address newBoostManager) public onlyAdmin {
         require(newBoostManager != address(0), "no zero address allowed");
         require(address(boostManager) == address(0), "VIX already set");
-        boostManager = IBoostManager(newBoostManager);
+                boostManager = IBoostManager(newBoostManager);
     }
 
     function getBoostManager() external view override returns (address) {
@@ -1831,7 +1873,7 @@ contract Comptroller is
     }
 
     function setRewardUpdater(address _rewardUpdater) public onlyAdmin {
-        require(_rewardUpdater != address(0), "no zero address allowed");
+        require(_rewardUpdater != address(0), "zero address");
         rewardUpdater = _rewardUpdater;
     }
 

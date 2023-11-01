@@ -8,6 +8,8 @@ import "../vote-escrow/interfaces/IBoostManager.sol";
 import "../interfaces/IComptroller.sol";
 import "./UnitrollerAdminStorage.sol";
 
+import "../rewards/interfaces/IRewardManager.sol";
+
 abstract contract ComptrollerV1Storage is IComptroller, UnitrollerAdminStorage  {
     /**
      * @notice Oracle which gives the price of any given asset
@@ -117,7 +119,7 @@ abstract contract ComptrollerV3Storage is ComptrollerV2Storage {
 
 abstract contract ComptrollerV4Storage is ComptrollerV3Storage {
     // @notice The borrowCapGuardian can set borrowCaps to any number for any market. Lowering the borrow cap could disable borrowing on the given market.
-    address public borrowCapGuardian;
+    address public capGuardian;
 
     // @notice Borrow caps enforced by borrowAllowed for each oToken address. Defaults to zero which corresponds to unlimited borrowing.
     mapping(address => uint) public borrowCaps;
@@ -144,4 +146,14 @@ abstract contract ComptrollerV7Storage is ComptrollerV6Storage {
     mapping(address => uint) public rewardReceivable;
 
     IBoostManager public boostManager;
+}
+
+abstract contract ComptrollerV8Storage is ComptrollerV7Storage {
+    /// @notice 
+    IRewardManager public rewardManager;
+}
+
+abstract contract ComptrollerV9Storage is ComptrollerV8Storage {
+    /// @notice 
+    mapping(address => uint256) public supplyCaps;
 }
