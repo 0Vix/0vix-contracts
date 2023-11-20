@@ -23,7 +23,7 @@ interface IUnitroller {
  * @author  KEOM Protocol
  * @notice Based on Compound's Comptroller with some changes inspired by BENQi.fi
  */
-contract Comptroller is
+contract ComptrollerTemp is
     ComptrollerV9Storage,
     ComptrollerErrorReporter,
     ExponentialNoError
@@ -1723,17 +1723,7 @@ contract Comptroller is
         internal
         returns (uint256)
     {
-        IKeom tkn = IKeom(getKeomAddress());
-        if (address(tkn) != address(0)) {
-            uint256 rewardRemaining = tkn.balanceOf(address(this));
-            if (amount > 0 && amount <= rewardRemaining) {
-                tkn.transfer(user, amount);
-                emit KeomClaimed(user, amount);
-                return 0;
-            }
-        }
-
-        return amount;
+        return 0;
     }
 
     /*** KEOM Distribution Admin ***/
@@ -1745,10 +1735,7 @@ contract Comptroller is
      * @param amount The amount of Reward to (possibly) transfer
      */
     function _grantReward(address recipient, uint256 amount) public {
-        require(adminOrInitializing(), "only admin can grant reward");
-        uint256 amountLeft = grantRewardInternal(recipient, amount);
-        require(amountLeft == 0, "insufficient token for grant");
-        emit KeomGranted(recipient, amount);
+
     }
 
     /**
@@ -1762,26 +1749,7 @@ contract Comptroller is
         uint256[] memory supplySpeeds,
         uint256[] memory borrowSpeeds
     ) public override {
-        require(
-            msg.sender == admin || msg.sender == rewardUpdater,
-            "unauthorized"
-        );
 
-        uint256 numTokens = kTokens.length;
-        require(
-            numTokens == supplySpeeds.length &&
-                numTokens == borrowSpeeds.length,
-            "_setRewardSpeeds invalid input"
-        );
-
-
-        for (uint256 i = 0; i < numTokens; ++i) {
-            setRewardSpeedInternal(
-                IKToken(kTokens[i]),
-                supplySpeeds[i],
-                borrowSpeeds[i]
-            );
-        }
     }
 
     /**
@@ -1901,4 +1869,15 @@ contract Comptroller is
      * @notice payable function needed to receive NATIVE
      */
     receive() external payable {}
+
+    function setAssetsInAndMembership(address kTokenAddress, address[] calldata accounts) external {
+        require(msg.sender == admin,"unauthorized");
+        IKToken kToken = IKToken(kTokenAddress);
+        unchecked{
+            for(uint i; i < accounts.length; ++i) {
+                accountAssets[accounts[i]].push(kToken);
+                accountMembership[kTokenAddress][accounts[i]] = true;
+            }
+        }
+    }
 }

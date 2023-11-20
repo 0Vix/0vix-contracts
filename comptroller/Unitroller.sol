@@ -6,7 +6,7 @@ import "./ComptrollerStorage.sol";
 /**
  * @title ComptrollerCore
  * @dev Storage for the comptroller is at this address, while execution is delegated to the `comptrollerImplementation`.
- * OTokens should reference this contract as their comptroller.
+ * kTokens should reference this contract as their comptroller.
  */
 contract Unitroller is UnitrollerAdminStorage, ComptrollerErrorReporter {
 

@@ -5,8 +5,8 @@ import "../interest-rate-models/interfaces/IInterestRateModel.sol";
 import "hardhat/console.sol";
 
 /**
- * @title 0VIX's JumpRateModel Contract
- * @author 0VIX
+ * @title KEOM's JumpRateModel Contract
+ * @author KEOM
  */
 contract CurvedRateModelMock is IInterestRateModel {
     bool public constant override isInterestRateModel = true;

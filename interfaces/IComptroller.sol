@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "../otokens/interfaces/IOToken.sol";
+import "../ktokens/interfaces/IKToken.sol";
 import "../oracles/chainlink/PriceOracle.sol";
 
 interface IComptroller {
@@ -10,45 +10,45 @@ interface IComptroller {
 
     /*** Assets You Are In ***/
 
-    function enterMarkets(address[] calldata oTokens) external returns (uint[] memory);
-    function exitMarket(address oToken) external returns (uint);
+    function enterMarkets(address[] calldata kTokens) external returns (uint[] memory);
+    function exitMarket(address kToken) external returns (uint);
 
     /*** Policy Hooks ***/
 
-    function mintAllowed(address oToken, address minter, uint mintAmount) external returns (uint);
+    function mintAllowed(address kToken, address minter, uint mintAmount) external returns (uint);
 
-    function redeemAllowed(address oToken, address redeemer, uint redeemTokens) external returns (uint);
-    function redeemVerify(address oToken, address redeemer, uint redeemAmount, uint redeemTokens) external;
+    function redeemAllowed(address kToken, address redeemer, uint redeemTokens) external returns (uint);
+    function redeemVerify(address kToken, address redeemer, uint redeemAmount, uint redeemTokens) external;
 
-    function borrowAllowed(address oToken, address borrower, uint borrowAmount) external returns (uint);
+    function borrowAllowed(address kToken, address borrower, uint borrowAmount) external returns (uint);
 
     function repayBorrowAllowed(
-        address oToken,
+        address kToken,
         address payer,
         address borrower,
         uint repayAmount) external returns (uint);
 
     function liquidateBorrowAllowed(
-        address oTokenBorrowed,
-        address oTokenCollateral,
+        address kTokenBorrowed,
+        address kTokenCollateral,
         address liquidator,
         address borrower,
         uint repayAmount) external returns (uint, uint);
 
     function seizeAllowed(
-        address oTokenCollateral,
-        address oTokenBorrowed,
+        address kTokenCollateral,
+        address kTokenBorrowed,
         address liquidator,
         address borrower,
         uint seizeTokens) external returns (uint);
 
-    function transferAllowed(address oToken, address src, address dst, uint transferTokens) external returns (uint);
+    function transferAllowed(address kToken, address src, address dst, uint transferTokens) external returns (uint);
 
     /*** Liquidity/Liquidation Calculations ***/
 
     function liquidateCalculateSeizeTokens(
-        address oTokenBorrowed,
-        address oTokenCollateral,
+        address kTokenBorrowed,
+        address kTokenCollateral,
         uint repayAmount,
         uint dynamicLiquidationIncentive) external view returns (uint, uint);
 
@@ -56,21 +56,21 @@ interface IComptroller {
 
     function isMarket(address market) external view returns(bool);
     function getBoostManager() external view returns(address);
-    function getAllMarkets() external view returns(IOToken[] memory);
+    function getAllMarkets() external view returns(IKToken[] memory);
     function oracle() external view returns(PriceOracle);
 
     function updateAndDistributeSupplierRewardsForToken(
-        address oToken,
+        address kToken,
         address account
     ) external;
 
     function updateAndDistributeBorrowerRewardsForToken(
-        address oToken,
+        address kToken,
         address borrower
     ) external;
 
     function _setRewardSpeeds(
-        address[] memory oTokens,
+        address[] memory kTokens,
         uint256[] memory supplySpeeds,
         uint256[] memory borrowSpeeds
     ) external;

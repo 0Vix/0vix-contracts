@@ -3,7 +3,7 @@ pragma solidity 0.8.4;
 
 /**
   * @title Careful Math
-  * @author 0VIX
+  * @author KEOM
   * @notice Derived from OpenZeppelin's SafeMath library
   *         https://github.com/OpenZeppelin/openzeppelin-solidity/blob/master/contracts/math/SafeMath.sol
   */

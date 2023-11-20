@@ -2,13 +2,13 @@
 pragma solidity 0.8.4;
 
 import "./interfaces/IAggregatorV2V3.sol";
-import "../../otokens/OErc20.sol";
-import "../../otokens/interfaces/IEIP20.sol";
+import "../../ktokens/KErc20.sol";
+import "../../ktokens/interfaces/IEIP20.sol";
 import "./PriceOracle.sol";
 
 /**
  * @title MockV3Aggregator **modified**
- * @notice Based on the 0vixOralce and FluxAggregator contract,
+ * @notice Based on the KeomOracle and FluxAggregator contract,
  * @notice Use this contract when you need to test
  * other contract's ability to read data from an
  * aggregator contract, but how the aggregator got
@@ -60,31 +60,31 @@ contract MockV3Aggregator is IAggregatorV2V3, PriceOracle {
     }
 
     // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ public @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ //
-    function getUnderlyingPrice(IOToken oToken)
+    function getUnderlyingPrice(IKToken kToken)
         public
         view
         override
         returns (uint256)
     {
-        if (address(oToken) == oWETH) {
-            return getNativePrice(oToken);
+        if (address(kToken) == oWETH) {
+            return getNativePrice(kToken);
         }
-        return getPrice(oToken);
+        return getPrice(kToken);
     }
 
-    function getUnderlyingTokenAddress(address oToken)
+    function getUnderlyingTokenAddress(address kToken)
         public
         view
         returns (address)
     {
-        address awnser = underlyingTokenAddress[oToken];
+        address awnser = underlyingTokenAddress[kToken];
         if (awnser == address(0)) revert isZeroAddress();
         return awnser;
     }
 
     // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ external @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ //
     function setUnderlyingPrice(
-        address oToken,
+        address kToken,
         uint256 underlyingPriceMantissa,
         uint256 updatedAt
     ) external onlyAdmin {
@@ -101,7 +101,7 @@ contract MockV3Aggregator is IAggregatorV2V3, PriceOracle {
             require(updatedAt - block.timestamp < 3, "mock: bad updatedAt 2");
             updatedAt = block.timestamp;
         }
-        if (oToken == oWETH) {
+        if (kToken == oWETH) {
             // underlyingPriceMantissa 8 decimals
             updateAnswer(int256(underlyingPriceMantissa));
             emit PricePosted(
@@ -112,7 +112,7 @@ contract MockV3Aggregator is IAggregatorV2V3, PriceOracle {
             );
             prices[oWETH] = PriceData(underlyingPriceMantissa, updatedAt);
         } else {
-            address underlyingToken = getUnderlyingTokenAddress(oToken);
+            address underlyingToken = getUnderlyingTokenAddress(kToken);
             emit PricePosted(
                 underlyingToken,
                 prices[underlyingToken].price,
@@ -126,14 +126,14 @@ contract MockV3Aggregator is IAggregatorV2V3, PriceOracle {
         }
     }
 
-    function setUnderlyingTokenAddress(IOToken oToken) external onlyAdmin {
-        if (address(oToken) == oWETH) revert isoWETH();
+    function setUnderlyingTokenAddress(IKToken kToken) external onlyAdmin {
+        if (address(kToken) == oWETH) revert isoWETH();
 
-        IEIP20 token = IEIP20(OErc20(address(oToken)).underlying());
+        IEIP20 token = IEIP20(KErc20(address(kToken)).underlying());
 
         if (address(token) == address(0)) revert isZeroAddress();
 
-        underlyingTokenAddress[address(oToken)] = address(token);
+        underlyingTokenAddress[address(kToken)] = address(token);
     }
 
     function updateRoundData(
@@ -207,8 +207,8 @@ contract MockV3Aggregator is IAggregatorV2V3, PriceOracle {
     }
 
     // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ internal @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ //
-    function getPrice(IOToken oToken) internal view returns (uint256 price) {
-        IEIP20 token = IEIP20(OErc20(address(oToken)).underlying());
+    function getPrice(IKToken kToken) internal view returns (uint256 price) {
+        IEIP20 token = IEIP20(KErc20(address(kToken)).underlying());
         // removing this for tests
         // if (prices[address(token)].updatedAt >= block.timestamp - validPeriod) {
         price = prices[address(token)].price;
@@ -224,20 +224,20 @@ contract MockV3Aggregator is IAggregatorV2V3, PriceOracle {
         }
     }
 
-    function getNativePrice(IOToken oToken)
+    function getNativePrice(IKToken kToken)
         internal
         view
         returns (uint256 price)
     {
-        require(address(oToken) == oWETH, "mock: not native");
+        require(address(kToken) == oWETH, "mock: not native");
 
         uint256 decimalDelta = uint256(18) -
-            (uint256(OErc20(address(oToken)).decimals()));
+            (uint256(KErc20(address(kToken)).decimals()));
         // removing this for tests
         // if (
-        //     prices[address(oToken)].updatedAt >= block.timestamp - validPeriod
+        //     prices[address(kToken)].updatedAt >= block.timestamp - validPeriod
         // ) {
-        price = prices[address(oToken)].price;
+        price = prices[address(kToken)].price;
         // }
 
         if (decimalDelta > 0) {

@@ -2,8 +2,8 @@
 pragma solidity 0.8.4;
 
 /**
-  * @title 0VIX's IInterestRateModel Interface
-  * @author 0VIX
+  * @title KEOM's IInterestRateModel Interface
+  * @author KEOM
   */
 interface IInterestRateModel {
     /// @notice Indicator that this is an InterestRateModel contract (for inspection)

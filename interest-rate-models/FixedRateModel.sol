@@ -5,8 +5,8 @@ import "./interfaces/IInterestRateModel.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 /**
- * @title 0VIX's FixedRateModel Contract
- * @author 0VIX
+ * @title KEOM's FixedRateModel Contract
+ * @author KEOM
  */
 contract FixedRateModel is IInterestRateModel, Ownable {
     bool public constant override isInterestRateModel = true;

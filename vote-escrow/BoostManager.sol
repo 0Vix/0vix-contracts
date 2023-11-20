@@ -3,14 +3,14 @@ pragma solidity =0.8.4;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../otokens/interfaces/IOToken.sol";
+import "../ktokens/interfaces/IKToken.sol";
 import "../interfaces/IComptroller.sol";
 
 contract BoostManager is Ownable {
     bool public init; //todo set to true when using proxy
     uint256 private constant MULTIPLIER = 10**18;
 
-    IERC20 public veOVIX;
+    IERC20 public veTKN;
     IComptroller public comptroller;
 
     mapping(address => bool) public authorized;
@@ -45,7 +45,7 @@ contract BoostManager is Ownable {
             && address(_owner) != address(0),
          "no zero address allowed");
         init = true;
-        veOVIX = ve;
+        veTKN = ve;
         comptroller = _comptroller;
         _transferOwnership(_owner);
     }
@@ -69,9 +69,9 @@ contract BoostManager is Ownable {
         returns (bool)
     {
         require(user != address(0), "no zero address allowed");
-        IOToken[] memory markets = comptroller.getAllMarkets();
+        IKToken[] memory markets = comptroller.getAllMarkets();
 
-        veBalances[user] = veOVIX.balanceOf(user);
+        veBalances[user] = veTKN.balanceOf(user);
         for (uint256 i = 0; i < markets.length; i++) {
             _updateBoostBasisPerMarket(address(markets[i]), user);
         }
@@ -80,8 +80,8 @@ contract BoostManager is Ownable {
     }
 
     function _updateBoostBasisPerMarket(address market, address user) internal {
-        uint256 userSupply = IOToken(market).balanceOf(user);
-        uint256 userBorrows = IOToken(market).borrowBalanceStored(user);
+        uint256 userSupply = IKToken(market).balanceOf(user);
+        uint256 userBorrows = IKToken(market).borrowBalanceStored(user);
         if (userSupply > 0) {
             comptroller.updateAndDistributeSupplierRewardsForToken(
                 market,
@@ -132,11 +132,11 @@ contract BoostManager is Ownable {
         );
     }
 
-    // call from oToken
+    // call from kToken
     function updateBoostSupplyBalances(
         address market,
         address user,
-        uint256 oldBalance, // todo: removing oldbalance: needs to be updated in oToken too. keep it until updating the oToken is necessary
+        uint256 oldBalance, // todo: removing oldbalance: needs to be updated in kToken too. keep it until updating the kToken is necessary
         uint256 newBalance
     ) external onlyAuthorized {
         require(user != address(0) && market != address(0), "no zero address allowed");
@@ -152,7 +152,7 @@ contract BoostManager is Ownable {
     function updateBoostBorrowBalances(
         address market,
         address user,
-        uint256 oldBalance, // todo: removing oldbalance: needs to be updated in oToken too. keep it until updating the oToken is necessary
+        uint256 oldBalance, // todo: removing oldbalance: needs to be updated in kToken too. keep it until updating the kToken is necessary
         uint256 newBalance
     ) external onlyAuthorized {
         require(user != address(0) && market != address(0), "no zero address allowed");
@@ -227,13 +227,13 @@ contract BoostManager is Ownable {
         require(marketType <= 1, "wrong market type");
 
         if (marketType == 0) {
-            if (IOToken(market).totalSupply() == 0) return 0;
-            return ((veOVIX.totalSupply() * MULTIPLIER) /
-                IOToken(market).totalSupply());
+            if (IKToken(market).totalSupply() == 0) return 0;
+            return ((veTKN.totalSupply() * MULTIPLIER) /
+                IKToken(market).totalSupply());
         } else {
-            if (IOToken(market).totalBorrows() == 0) return 0;
-            return ((veOVIX.totalSupply() * MULTIPLIER) /
-                IOToken(market).totalBorrows());
+            if (IKToken(market).totalBorrows() == 0) return 0;
+            return ((veTKN.totalSupply() * MULTIPLIER) /
+                IKToken(market).totalBorrows());
         }
     }
 
@@ -271,7 +271,7 @@ contract BoostManager is Ownable {
             calcBoostedBalance(
                 user,
                 supplyBoosterBasis[market][user],
-                IOToken(market).balanceOf(user)
+                IKToken(market).balanceOf(user)
             )
         );
     }
@@ -285,7 +285,7 @@ contract BoostManager is Ownable {
             calcBoostedBalance(
                 user,
                 borrowBoosterBasis[market][user],
-                IOToken(market).borrowBalanceStored(user)
+                IKToken(market).borrowBalanceStored(user)
             )
         );
     }
@@ -295,7 +295,7 @@ contract BoostManager is Ownable {
         view
         returns (uint256)
     {
-        return (IOToken(market).totalSupply() + deltaTotalSupply[market]);
+        return (IKToken(market).totalSupply() + deltaTotalSupply[market]);
     }
 
     function boostedTotalBorrows(address market)
@@ -303,7 +303,7 @@ contract BoostManager is Ownable {
         view
         returns (uint256)
     {
-        return (IOToken(market).totalBorrows() + deltaTotalBorrows[market]);
+        return (IKToken(market).totalBorrows() + deltaTotalBorrows[market]);
     }
 
     function setAuthorized(address addr, bool flag) external onlyOwner {
@@ -316,11 +316,11 @@ contract BoostManager is Ownable {
         return authorized[addr];
     }
 
-    function setVeOVIX(IERC20 ve) external onlyOwner {
+    function setVeTKN(IERC20 ve) external onlyOwner {
         require(address(ve) != address(0), "no zero address allowed");
-        require(address(veOVIX) == address(0), "address can only be set once");
-        veOVIX = ve;
-        emit VeOVIXUpdated(veOVIX);
+        require(address(veTKN) == address(0), "address can only be set once");
+        veTKN = ve;
+        emit VeTKNUpdated(veTKN);
     }
 
     event BoostBasisUpdated(
@@ -340,5 +340,5 @@ contract BoostManager is Ownable {
     );
 
     event AuthorizedUpdated(address indexed addr, bool flag);
-    event VeOVIXUpdated(IERC20 ve);
+    event VeTKNUpdated(IERC20 ve);
 }

@@ -9,7 +9,7 @@ import "../interfaces/IComptroller.sol";
 
 /**
  * @title Vote Controller
- * @author 0VIX Protocol (inspired by Curve Finance)
+ * @author KEOM Protocol (inspired by Curve Finance)
  * @notice Controls voting for supported markets and the issuance of additinal rewards to Comptroller
  */
 contract VoteController {
@@ -25,7 +25,7 @@ contract VoteController {
     EnumerableSet.AddressSet private secondEpochUpdates;
     EnumerableSet.AddressSet private thirdEpochUpdates;
 
-    // set of the votable markets - this contract does **not** manage other non-votable 0vix markets
+    // set of the votable markets - this contract does **not** manage other non-votable Protocol markets
     EnumerableSet.AddressSet private markets;
 
     bool internal initialized = true; // true, because of using a proxy
@@ -285,7 +285,7 @@ contract VoteController {
      */
     function addMarket(address addr) external onlyAdmin {
         require(!markets.contains(addr), "Cannot add the same market twice");
-        require(comp.isMarket(addr), "address is not an 0vix market");
+        require(comp.isMarket(addr), "address is not an Protocol market");
 
         markets.add(addr);
 

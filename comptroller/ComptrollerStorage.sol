@@ -1,13 +1,12 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "../otokens/interfaces/IOToken.sol";
+import "../ktokens/interfaces/IKToken.sol";
 import "../oracles/chainlink/PriceOracle.sol";
 import "../vote-escrow/interfaces/IBoostManager.sol";
 
 import "../interfaces/IComptroller.sol";
 import "./UnitrollerAdminStorage.sol";
-
 import "../rewards/interfaces/IRewardManager.sol";
 
 abstract contract ComptrollerV1Storage is IComptroller, UnitrollerAdminStorage  {
@@ -34,7 +33,7 @@ abstract contract ComptrollerV1Storage is IComptroller, UnitrollerAdminStorage  
     /**
      * @notice Per-account mapping of "assets you are in", capped by maxAssets
      */
-    mapping(address => IOToken[]) public accountAssets;
+    mapping(address => IKToken[]) public accountAssets;
 
     /// @notice Per-market mapping of "accounts in this asset"
     mapping(address => mapping(address => bool)) public accountMembership;
@@ -56,7 +55,7 @@ abstract contract ComptrollerV2Storage is ComptrollerV1Storage {
     }
 
     /**
-     * @notice Official mapping of oTokens -> Market metadata
+     * @notice Official mapping of kTokens -> Market metadata
      * @dev Used e.g. to determine if a market is supported
      */
     mapping(address => Market) public markets;
@@ -92,57 +91,57 @@ abstract contract ComptrollerV3Storage is ComptrollerV2Storage {
     }
 
     /// @notice A list of all markets
-    IOToken[] public allMarkets;
+    IKToken[] public allMarkets;
 
-    /// @notice The rate at which the flywheel distributes VIX, per second
+    /// @notice The rate at which the flywheel distributes TKN, per second
     uint public compRate;
 
     /// @notice The portion of compRate that each market currently receives
     mapping(address => uint) public rewardSpeeds;
 
-    /// @notice The 0VIX market supply state for each market
+    /// @notice The Protocol market supply state for each market
     mapping(address => MarketState) public supplyState;
 
-    /// @notice The 0VIX market borrow state for each market
+    /// @notice The Protocol market borrow state for each market
     mapping(address => MarketState) public borrowState;
 
-    /// @notice The 0VIX borrow index for each market for each supplier as of the last time they accrued VIX
+    /// @notice The Protocol borrow index for each market for each supplier as of the last time they accrued TKN
     mapping(address => mapping(address => uint)) public rewardSupplierIndex;
 
-    /// @notice The 0VIX borrow index for each market for each borrower as of the last time they accrued VIX
+    /// @notice The Protocol borrow index for each market for each borrower as of the last time they accrued TKN
     mapping(address => mapping(address => uint)) public rewardBorrowerIndex;
 
-    /// @notice The VIX accrued but not yet transferred to each user
+    /// @notice The TKN accrued but not yet transferred to each user
     mapping(address => uint) public rewardAccrued;
 
 }
 
 abstract contract ComptrollerV4Storage is ComptrollerV3Storage {
-    // @notice The borrowCapGuardian can set borrowCaps to any number for any market. Lowering the borrow cap could disable borrowing on the given market.
+    // @notice The xapGuardian can set caps to any number for any market. Lowering the borrow cap could disable borrowing on the given market.
     address public capGuardian;
 
-    // @notice Borrow caps enforced by borrowAllowed for each oToken address. Defaults to zero which corresponds to unlimited borrowing.
+    // @notice Borrow caps enforced by borrowAllowed for each kToken address. Defaults to zero which corresponds to unlimited borrowing.
     mapping(address => uint) public borrowCaps;
 }
 
 abstract contract ComptrollerV5Storage is ComptrollerV4Storage {
-    /// @notice The portion of VIX that each contributor receives per second
+    /// @notice The portion of TKN that each contributor receives per second
     mapping(address => uint) public rewardContributorSpeeds;
 
-    /// @notice Last timestamp at which a contributor's VIX rewards have been allocated
+    /// @notice Last timestamp at which a contributor's TKN rewards have been allocated
     mapping(address => uint) public lastContributorTimestamp;
 }
 
 abstract contract ComptrollerV6Storage is ComptrollerV5Storage {
-    /// @notice The rate at which VIX is distributed to the corresponding borrow market (per second)
+    /// @notice The rate at which TKN is distributed to the corresponding borrow market (per second)
     mapping(address => uint) public rewardBorrowSpeeds;
 
-    /// @notice The rate at which VIX is distributed to the corresponding supply market (per second)
+    /// @notice The rate at which TKN is distributed to the corresponding supply market (per second)
     mapping(address => uint) public rewardSupplySpeeds;
 }
 
 abstract contract ComptrollerV7Storage is ComptrollerV6Storage {
-    /// @notice Accounting storage mapping account addresses to how much VIX they owe the protocol.
+    /// @notice Accounting storage mapping account addresses to how much TKN they owe the protocol.
     mapping(address => uint) public rewardReceivable;
 
     IBoostManager public boostManager;

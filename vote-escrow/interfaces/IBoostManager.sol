@@ -41,7 +41,7 @@ interface IBoostManager {
 
     function setAuthorized(address addr, bool flag) external;
 
-    function setVeOVIX(IERC20 ve) external;
+    function setVeTKN(IERC20 ve) external;
 
     function isAuthorized(address addr) external view returns (bool);
 }

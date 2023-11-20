@@ -1,49 +1,49 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "../otokens/ONative.sol";
+import "../ktokens/KNative.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
 /**
- * @title 0VIX's Maximillion Contract
- * @author 0VIX
+ * @title KEOM's Maximillion Contract
+ * @author KEOM
  */
 contract Maximillion {
     /**
-     * @notice The default oNative market to repay in
+     * @notice The default kNative market to repay in
      */
-    ONative public immutable oNative;
+    KNative public immutable kNative;
 
     /**
-     * @notice Construct a Maximillion to repay max in a ONative market
+     * @notice Construct a Maximillion to repay max in a KNative market
      */
-    constructor(ONative oNative_) {
-        oNative = oNative_;
+    constructor(KNative kNative_) {
+        kNative = kNative_;
     }
 
     /**
-     * @notice msg.sender sends Native to repay an account's borrow in the oNative market
+     * @notice msg.sender sends Native to repay an account's borrow in the kNative market
      * @dev The provided Native is applied towards the borrow balance, any excess is refunded
      * @param borrower The address of the borrower account to repay on behalf of
      */
     function repayBehalf(address borrower) public payable {
-        repayBehalfExplicit(borrower, oNative);
+        repayBehalfExplicit(borrower, kNative);
     }
 
     /**
-     * @notice msg.sender sends Native to repay an account's borrow in a oNative market
+     * @notice msg.sender sends Native to repay an account's borrow in a kNative market
      * @dev The provided Native is applied towards the borrow balance, any excess is refunded
      * @param borrower The address of the borrower account to repay on behalf of
-     * @param oNative_ The address of the oNative contract to repay in
+     * @param cNative_ The address of the kNative contract to repay in
      */
-    function repayBehalfExplicit(address borrower, ONative oNative_) public payable {
+    function repayBehalfExplicit(address borrower, KNative cNative_) public payable {
         uint received = msg.value;
-        uint borrows = oNative_.borrowBalanceCurrent(borrower);
+        uint borrows = cNative_.borrowBalanceCurrent(borrower);
         if (received > borrows) {
-            oNative_.repayBorrowBehalf{value: borrows}(borrower);
+            cNative_.repayBorrowBehalf{value: borrows}(borrower);
             Address.sendValue(payable(msg.sender), received - borrows);
         } else {
-            oNative_.repayBorrowBehalf{value: received}(borrower);
+            cNative_.repayBorrowBehalf{value: received}(borrower);
         }
     }
 }

@@ -4,8 +4,8 @@ pragma solidity 0.8.4;
 import "./interfaces/IInterestRateModel.sol";
 
 /**
- * @title 0VIX's JumpRateModel Contract
- * @author 0VIX
+ * @title KEOM's CurvedRateModel Contract
+ * @author KEOM
  */
 contract CurvedRateModel is IInterestRateModel {
     bool public constant override isInterestRateModel = true;

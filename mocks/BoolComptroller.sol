@@ -34,69 +34,69 @@ contract BoolComptroller is IComptroller {
 
     /*** Assets You Are In ***/
 
-    function enterMarkets(address[] calldata _cTokens) external override returns (uint[] memory) {
-        _cTokens;
+    function enterMarkets(address[] calldata _kTokens) external override returns (uint[] memory) {
+        _kTokens;
         uint[] memory ret;
         return ret;
     }
 
-    function exitMarket(address _cToken) external override returns (uint) {
-        _cToken;
+    function exitMarket(address _kToken) external override returns (uint) {
+        _kToken;
         return noError;
     }
 
     /*** Policy Hooks ***/
 
-    function mintAllowed(address _cToken, address _minter, uint _mintAmount) public override returns (uint) {
-        _cToken;
+    function mintAllowed(address _kToken, address _minter, uint _mintAmount) public override returns (uint) {
+        _kToken;
         _minter;
         _mintAmount;
         return allowMint ? noError : opaqueError;
     }
 
-    function mintVerify(address _cToken, address _minter, uint _mintAmount, uint _mintTokens) external {
-        _cToken;
+    function mintVerify(address _kToken, address _minter, uint _mintAmount, uint _mintTokens) external {
+        _kToken;
         _minter;
         _mintAmount;
         _mintTokens;
         require(verifyMint, "mintVerify rejected mint");
     }
 
-    function redeemAllowed(address _cToken, address _redeemer, uint _redeemTokens) public override returns (uint) {
-        _cToken;
+    function redeemAllowed(address _kToken, address _redeemer, uint _redeemTokens) public override returns (uint) {
+        _kToken;
         _redeemer;
         _redeemTokens;
         return allowRedeem ? noError : opaqueError;
     }
 
-    function redeemVerify(address _cToken, address _redeemer, uint _redeemAmount, uint _redeemTokens) external override {
-        _cToken;
+    function redeemVerify(address _kToken, address _redeemer, uint _redeemAmount, uint _redeemTokens) external override {
+        _kToken;
         _redeemer;
         _redeemAmount;
         _redeemTokens;
         require(verifyRedeem, "redeemVerify rejected redeem");
     }
 
-    function borrowAllowed(address _cToken, address _borrower, uint _borrowAmount) public override returns (uint) {
-        _cToken;
+    function borrowAllowed(address _kToken, address _borrower, uint _borrowAmount) public override returns (uint) {
+        _kToken;
         _borrower;
         _borrowAmount;
         return allowBorrow ? noError : opaqueError;
     }
 
-    function borrowVerify(address _cToken, address _borrower, uint _borrowAmount) external {
-        _cToken;
+    function borrowVerify(address _kToken, address _borrower, uint _borrowAmount) external {
+        _kToken;
         _borrower;
         _borrowAmount;
         require(verifyBorrow, "borrowVerify rejected borrow");
     }
 
     function repayBorrowAllowed(
-        address _cToken,
+        address _kToken,
         address _payer,
         address _borrower,
         uint _repayAmount) public override returns (uint) {
-        _cToken;
+        _kToken;
         _payer;
         _borrower;
         _repayAmount;
@@ -104,12 +104,12 @@ contract BoolComptroller is IComptroller {
     }
 
     function repayBorrowVerify(
-        address _cToken,
+        address _kToken,
         address _payer,
         address _borrower,
         uint _repayAmount,
         uint _borrowerIndex) external {
-        _cToken;
+        _kToken;
         _payer;
         _borrower;
         _repayAmount;
@@ -118,13 +118,13 @@ contract BoolComptroller is IComptroller {
     }
 
     function liquidateBorrowAllowed(
-        address _cTokenBorrowed,
-        address _cTokenCollateral,
+        address _kTokenBorrowed,
+        address _kTokenCollateral,
         address _liquidator,
         address _borrower,
         uint _repayAmount) public override returns (uint, uint) {
-        _cTokenBorrowed;
-        _cTokenCollateral;
+        _kTokenBorrowed;
+        _kTokenCollateral;
         _liquidator;
         _borrower;
         _repayAmount;
@@ -132,14 +132,14 @@ contract BoolComptroller is IComptroller {
     }
 
     function liquidateBorrowVerify(
-        address _cTokenBorrowed,
-        address _cTokenCollateral,
+        address _kTokenBorrowed,
+        address _kTokenCollateral,
         address _liquidator,
         address _borrower,
         uint _repayAmount,
         uint _seizeTokens) external {
-        _cTokenBorrowed;
-        _cTokenCollateral;
+        _kTokenBorrowed;
+        _kTokenCollateral;
         _liquidator;
         _borrower;
         _repayAmount;
@@ -148,13 +148,13 @@ contract BoolComptroller is IComptroller {
     }
 
     function seizeAllowed(
-        address _cTokenCollateral,
-        address _cTokenBorrowed,
+        address _kTokenCollateral,
+        address _kTokenBorrowed,
         address _borrower,
         address _liquidator,
         uint _seizeTokens) public override returns (uint) {
-        _cTokenCollateral;
-        _cTokenBorrowed;
+        _kTokenCollateral;
+        _kTokenBorrowed;
         _liquidator;
         _borrower;
         _seizeTokens;
@@ -162,13 +162,13 @@ contract BoolComptroller is IComptroller {
     }
 
     function seizeVerify(
-        address _cTokenCollateral,
-        address _cTokenBorrowed,
+        address _kTokenCollateral,
+        address _kTokenBorrowed,
         address _liquidator,
         address _borrower,
         uint _seizeTokens) external {
-        _cTokenCollateral;
-        _cTokenBorrowed;
+        _kTokenCollateral;
+        _kTokenBorrowed;
         _liquidator;
         _borrower;
         _seizeTokens;
@@ -176,11 +176,11 @@ contract BoolComptroller is IComptroller {
     }
 
     function transferAllowed(
-        address _cToken,
+        address _kToken,
         address _src,
         address _dst,
         uint _transferTokens) public override returns (uint) {
-        _cToken;
+        _kToken;
         _src;
         _dst;
         _transferTokens;
@@ -188,11 +188,11 @@ contract BoolComptroller is IComptroller {
     }
 
     function transferVerify(
-        address _cToken,
+        address _kToken,
         address _src,
         address _dst,
         uint _transferTokens) external {
-        _cToken;
+        _kToken;
         _src;
         _dst;
         _transferTokens;
@@ -200,29 +200,29 @@ contract BoolComptroller is IComptroller {
     }
 
     function updateAndDistributeBorrowerRewardsForToken(
-        address oToken,
+        address kToken,
         address borrower
     ) external override {
-        oToken;
+        kToken;
         borrower;
         return;
     }
 
     function updateAndDistributeSupplierRewardsForToken(
-        address oToken,
+        address kToken,
         address account
     ) external override {
-        oToken;
+        kToken;
         account;
         return;
     }
 
     function _setRewardSpeeds(
-        address[] memory oTokens,
+        address[] memory kTokens,
         uint256[] memory supplySpeeds,
         uint256[] memory borrowSpeeds
     ) external override {
-        oTokens;
+        kTokens;
         supplySpeeds;
         borrowSpeeds;
         return;
@@ -231,7 +231,7 @@ contract BoolComptroller is IComptroller {
     function getBoostManager() external view override returns(address) {
         return address(0);
     }
-    function getAllMarkets() external view override returns(IOToken[] memory tokens) {
+    function getAllMarkets() external view override returns(IKToken[] memory tokens) {
         return tokens;
     }
 
@@ -242,12 +242,12 @@ contract BoolComptroller is IComptroller {
     /*** Special Liquidation Calculation ***/
 
     function liquidateCalculateSeizeTokens(
-        address _cTokenBorrowed,
-        address _cTokenCollateral,
+        address _kTokenBorrowed,
+        address _kTokenCollateral,
         uint _repayAmount,
         uint dynamicLiquidationIncentive) public view override returns (uint, uint) {
-        _cTokenBorrowed;
-        _cTokenCollateral;
+        _kTokenBorrowed;
+        _kTokenCollateral;
         _repayAmount;
         return failCalculateSeizeTokens ? (opaqueError, 0) : (noError, calculatedSeizeTokens);
     }

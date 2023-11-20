@@ -1,3 +1,3 @@
-# 0VIX Smart Contracts
+# KEOM Smart Contracts
 
-This repository contains the recent versions of the protocol's smart contracts.
+This repository contains the recent versions of the Keom's smart contracts.
