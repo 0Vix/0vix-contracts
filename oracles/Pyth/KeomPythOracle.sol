@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "./PriceOracle.sol";
+import "../chainlink/PriceOracle.sol";
 import "../../ktokens/KErc20.sol";
 import "../../ktokens/interfaces/IEIP20.sol";
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
