@@ -77,18 +77,7 @@ abstract contract KToken is KTokenStorage, Exponential, TokenErrorReporter, Init
         uint256 oldBalance,
         uint256 newBalance
     ) internal {
-        address boostManager = comptroller.getBoostManager();
-        if (
-            boostManager != address(0) &&
-            IBoostManager(boostManager).isAuthorized(address(this))
-        ) {
-            IBoostManager(boostManager).updateBoostSupplyBalances(
-                address(this),
-                user,
-                oldBalance,
-                newBalance
-            );
-        }
+
     }
 
     function _updateBoostBorrowBalances(
@@ -96,18 +85,7 @@ abstract contract KToken is KTokenStorage, Exponential, TokenErrorReporter, Init
         uint256 oldBalance,
         uint256 newBalance
     ) internal {
-        address boostManager = comptroller.getBoostManager();
-        if (
-            boostManager != address(0) &&
-            IBoostManager(boostManager).isAuthorized(address(this))
-        ) {
-            IBoostManager(boostManager).updateBoostBorrowBalances(
-                address(this),
-                user,
-                oldBalance,
-                newBalance
-            );
-        }
+  
     }
 
     /**
@@ -1789,16 +1767,6 @@ abstract contract KToken is KTokenStorage, Exponential, TokenErrorReporter, Init
         // (No safe failures beyond this point)
 
         /* We write the previously calculated values into storage */
-        _updateBoostSupplyBalances(
-            borrower,
-            accountTokens[borrower],
-            vars.borrowerTokensNew
-        );
-        _updateBoostSupplyBalances(
-            liquidator,
-            accountTokens[liquidator],
-            vars.liquidatorTokensNew
-        );
 
         totalReserves = vars.totalReservesNew;
         totalSupply = vars.totalSupplyNew;
@@ -1831,6 +1799,13 @@ abstract contract KToken is KTokenStorage, Exponential, TokenErrorReporter, Init
         address oldAdmin = admin;
         admin = _admin;
         emit NewAdmin(oldAdmin, admin);
+    }
+
+    function _setNameAndSymbol(string calldata _name, string calldata _symbol) external
+    {
+        require(msg.sender == admin, "unauthorized");
+        name = _name;
+        symbol = _symbol;
     }
 
     /**
