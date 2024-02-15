@@ -1,10 +1,12 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "./PriceOracle.sol";
+import "../PriceOracle.sol";
 import "../../ktokens/KErc20.sol";
 import "../../ktokens/interfaces/IEIP20.sol";
 import "./interfaces/IAggregatorV2V3.sol";
+
+error NotImplemented();
 
 contract KeomChainlinkOracleV2 is PriceOracle {
 
@@ -165,6 +167,10 @@ contract KeomChainlinkOracleV2 is PriceOracle {
 
     function _setKNative(address _cNative) internal {
         kNative = _cNative;
+    }
+
+    function updateUnderlyingPrices(bytes[] calldata) external pure override {
+        revert NotImplemented();
     }
 
     modifier onlyAdmin() {

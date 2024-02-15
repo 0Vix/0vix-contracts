@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.4;
 
-import "../chainlink/PriceOracle.sol";
+import "../PriceOracle.sol";
 import "../../ktokens/KErc20.sol";
 import "../../ktokens/interfaces/IEIP20.sol";
 
@@ -26,6 +26,8 @@ interface IExOraclePriceData
 
     function lastResponseTime(address source) external view returns (uint256);
 }
+
+error NotImplemented();
 
 contract KeomX1Oracle is PriceOracle {
     address public admin;
@@ -118,5 +120,9 @@ contract KeomX1Oracle is PriceOracle {
     modifier onlyAdmin() {
         require(msg.sender == admin, "only admin may call");
         _;
+    }
+
+    function updateUnderlyingPrices(bytes[] calldata) external pure override {
+        revert NotImplemented();
     }
 }

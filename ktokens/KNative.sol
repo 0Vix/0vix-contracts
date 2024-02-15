@@ -123,6 +123,28 @@ contract KNative is KToken {
     }
 
     /**
+     * @notice The sender liquidates the borrowers collateral and updates prices at Pyth's oracle.
+     *  The collateral seized is transferred to the liquidator.
+     * @dev Reverts upon any failure
+     * @param borrower The borrower of this kToken to be liquidated
+     * @param kTokenCollateral The market in which to seize collateral from the borrower
+     * @param priceUpdateData data for updating prices on Pyth smart contract
+     */
+    function liquidateBorrowWithPriceUpdate(
+        address borrower, 
+        IKToken kTokenCollateral, 
+        bytes[] calldata priceUpdateData
+    ) external payable {
+        comptroller.updatePrices(priceUpdateData);
+        (uint256 err, ) = liquidateBorrowInternal(
+            borrower,
+            msg.value,
+            kTokenCollateral
+        );
+        requireNoError(err, "liquidateBorrow failed");
+    }
+
+    /**
      * @notice The sender adds to reserves.
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
      */

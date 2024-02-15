@@ -2,12 +2,15 @@
 pragma solidity 0.8.4;
 
 import "../ktokens/interfaces/IKToken.sol";
-import "../oracles/chainlink/PriceOracle.sol";
-import "../vote-escrow/interfaces/IBoostManager.sol";
+import "../oracles/PriceOracle.sol";
 
 import "../interfaces/IComptroller.sol";
 import "./UnitrollerAdminStorage.sol";
 import "../rewards/interfaces/IRewardManager.sol";
+
+interface IBoostManager {
+
+} 
 
 abstract contract ComptrollerV1Storage is IComptroller, UnitrollerAdminStorage  {
     /**

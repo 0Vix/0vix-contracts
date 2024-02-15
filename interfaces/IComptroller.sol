@@ -2,7 +2,7 @@
 pragma solidity 0.8.4;
 
 import "../ktokens/interfaces/IKToken.sol";
-import "../oracles/chainlink/PriceOracle.sol";
+import "../oracles/PriceOracle.sol";
 
 interface IComptroller {
     /// @notice Indicator that this is a Comptroller contract (for inspection)
@@ -52,26 +52,8 @@ interface IComptroller {
         uint repayAmount,
         uint dynamicLiquidationIncentive) external view returns (uint, uint);
 
-
-
     function isMarket(address market) external view returns(bool);
-    function getBoostManager() external view returns(address);
     function getAllMarkets() external view returns(IKToken[] memory);
     function oracle() external view returns(PriceOracle);
-
-    function updateAndDistributeSupplierRewardsForToken(
-        address kToken,
-        address account
-    ) external;
-
-    function updateAndDistributeBorrowerRewardsForToken(
-        address kToken,
-        address borrower
-    ) external;
-
-    function _setRewardSpeeds(
-        address[] memory kTokens,
-        uint256[] memory supplySpeeds,
-        uint256[] memory borrowSpeeds
-    ) external;
+    function updatePrices(bytes[] calldata priceUpdateData) external;
 }

@@ -6,12 +6,6 @@ import "../libraries/ExponentialNoError.sol";
 import "../interfaces/IComptroller.sol";
 import "./ComptrollerStorage.sol";
 
-interface IKeom {
-    function transfer(address, uint256) external;
-
-    function balanceOf(address) external view returns (uint256);
-}
-
 interface IUnitroller {
     function admin() external view returns (address);
 
@@ -71,34 +65,6 @@ contract Comptroller is
     /// @notice Emitted when an action is paused on a market
     event ActionPaused(IKToken kToken, string action, bool pauseState);
 
-    /// @notice Emitted when a new borrow-side Reward speed is calculated for a market
-    event RewardBorrowSpeedUpdated(IKToken indexed kToken, uint256 newSpeed);
-
-    /// @notice Emitted when a new supply-side Reward speed is calculated for a market
-    event RewardSupplySpeedUpdated(IKToken indexed kToken, uint256 newSpeed);
-
-    /// @notice Emitted when a new Reward speed is set for a contributor
-    event ContributorRewardSpeedUpdated(
-        address indexed contributor,
-        uint256 newSpeed
-    );
-
-    /// @notice Emitted when KEOM is distributed to a supplier
-    event DistributedSupplierReward(
-        IKToken indexed kToken,
-        address indexed supplier,
-        uint256 tokenDelta,
-        uint256 tokenSupplyIndex
-    );
-
-    /// @notice Emitted when KEOM is distributed to a borrower
-    event DistributedBorrowerReward(
-        IKToken indexed kToken,
-        address indexed borrower,
-        uint256 tokenDelta,
-        uint256 tokenBorrowIndex
-    );
-
     /// @notice Emitted when borrow cap for a kToken is changed
     event NewBorrowCap(IKToken indexed kToken, uint256 newBorrowCap);
 
@@ -107,9 +73,6 @@ contract Comptroller is
 
     /// @notice Emitted when KEOM is granted by admin
     event KeomGranted(address recipient, uint256 amount);
-
-    /// @notice Emitted when KEOM rewards are being claimed for a user
-    event KeomClaimed(address recipient, uint256 amount);
 
     bool public constant override isComptroller = true;
 
@@ -135,6 +98,14 @@ contract Comptroller is
 
     constructor() {
         admin = msg.sender;
+    }
+
+    /**
+     * @notice Updates price data of underlying oracle
+     * @param priceUpdateData data for updating prices on Pyth smart contract
+     */
+    function updatePrices(bytes[] calldata priceUpdateData) public override {
+        oracle.updateUnderlyingPrices(priceUpdateData);
     }
 
     /*** Assets You Are In ***/
@@ -363,8 +334,6 @@ contract Comptroller is
             addToMarketInternal(IKToken(kToken), minter);
         }
 
-        updateAndDistributeSupplierRewardsForToken(kToken, minter);
-
         return uint256(Error.NO_ERROR);
     }
 
@@ -386,8 +355,6 @@ contract Comptroller is
         if (allowed != uint256(Error.NO_ERROR)) {
             return allowed;
         }
-
-        updateAndDistributeSupplierRewardsForToken(kToken, redeemer);
 
         return uint256(Error.NO_ERROR);
     }
@@ -513,9 +480,6 @@ contract Comptroller is
             return uint256(Error.INSUFFICIENT_LIQUIDITY);
         }
 
-        // Keep the flywheel moving
-        updateAndDistributeBorrowerRewardsForToken(kToken, borrower);
-
         return uint256(Error.NO_ERROR);
     }
 
@@ -542,9 +506,6 @@ contract Comptroller is
         if (!markets[kToken].isListed) {
             return uint256(Error.MARKET_NOT_LISTED);
         }
-
-        // Keep the flywheel moving
-        updateAndDistributeBorrowerRewardsForToken(kToken, borrower);
 
         return uint256(Error.NO_ERROR);
     }
@@ -661,11 +622,12 @@ contract Comptroller is
         address liquidator,
         address borrower,
         uint256 seizeTokens
-    ) external override returns (uint256) {
+    ) external view override returns (uint256) {
         // Pausing is a very serious situation - we revert to sound the alarms
         require(!seizeGuardianPaused, "seize is paused");
 
         // Shh - currently unused
+        liquidator;
         seizeTokens;
 
         if (
@@ -683,11 +645,6 @@ contract Comptroller is
         }
 
         require(accountMembership[kTokenCollateral][borrower], "borrower exited collateral market");
-
-        // Keep the flywheel moving
-        updateRewardSupplyIndex(kTokenCollateral);
-        distributeSupplierReward(kTokenCollateral, borrower);
-        distributeSupplierReward(kTokenCollateral, liquidator);
 
         return uint256(Error.NO_ERROR);
     }
@@ -715,11 +672,6 @@ contract Comptroller is
         if (allowed != uint256(Error.NO_ERROR)) {
             return allowed;
         }
-
-        // Keep the flywheel moving
-        updateRewardSupplyIndex(kToken);
-        distributeSupplierReward(kToken, src);
-        distributeSupplierReward(kToken, dst);
 
         return uint256(Error.NO_ERROR);
     }
@@ -971,7 +923,7 @@ contract Comptroller is
         address kTokenCollateral,
         uint256 actualRepayAmount,
         uint256 dynamicLiquidationIncentive
-    ) external view override returns (uint256, uint256) {
+    ) public view override returns (uint256, uint256) {
         /* Read oracle prices for borrowed and collateral markets */
         uint256 priceBorrowedMantissa = oracle.getUnderlyingPrice(
             IKToken(kTokenBorrowed)
@@ -1006,6 +958,71 @@ contract Comptroller is
         uint256 seizeTokens = mul_ScalarTruncate(ratio, actualRepayAmount);
 
         return (uint256(Error.NO_ERROR), seizeTokens);
+    }
+
+    /*** Functions with price update ***/
+
+    /**
+     * @notice Calculate number of tokens of collateral asset to seize given an underlying amount after updating prices at Pyth's oracle
+     * @dev Used in liquidation (called in kToken.liquidateBorrowFresh)
+     * @param kTokenBorrowed The address of the borrowed kToken
+     * @param kTokenCollateral The address of the collateral kToken
+     * @param actualRepayAmount The amount of kTokenBorrowed underlying to convert into kTokenCollateral tokens
+     * @param dynamicLiquidationIncentive The liquidation incentive calculated based on LTV
+     * @param priceUpdateData data for updating prices on Pyth smart contract
+     * @return (errorCode, number of kTokenCollateral tokens to be seized in a liquidation)
+     */
+    function liquidateCalculateSeizeTokensWithPriceUpdate(
+        address kTokenBorrowed,
+        address kTokenCollateral,
+        uint256 actualRepayAmount,
+        uint256 dynamicLiquidationIncentive,
+        bytes[] calldata priceUpdateData
+    ) external returns (uint256, uint256) {
+        updatePrices(priceUpdateData);
+        return liquidateCalculateSeizeTokens(
+            kTokenBorrowed, 
+            kTokenCollateral, 
+            actualRepayAmount, 
+            dynamicLiquidationIncentive);
+    }
+
+    /**
+     * @notice Determine the current account liquidity wrt collateral requirements after updating prices at Pyth's oracle
+     * @param account the account whose liquidity is returned
+     * @param priceUpdateData data for updating prices on Pyth smart contract
+     * @return (possible error code (semi-opaque),
+                account liquidity in excess of collateral requirements,
+     *          account shortfall below collateral requirements)
+     */
+    function getAccountLiquidityWithPriceUpdate(address account, bytes[] calldata priceUpdateData)
+        public returns (uint256, uint256 ,uint256) 
+    {
+        updatePrices(priceUpdateData);
+        return getAccountLiquidity(account);
+    }
+
+        /**
+     * @notice Determine what the account liquidity would be if the given amounts were redeemed/borrowed after updating prices at Pyth's oracle
+     * @param kTokenModify The market to hypothetically redeem/borrow in
+     * @param account The account to determine liquidity for
+     * @param redeemTokens The number of tokens to hypothetically redeem
+     * @param borrowAmount The amount of underlying to hypothetically borrow
+     * @param priceUpdateData data for updating prices on Pyth smart contract
+     * @return (possible error code (semi-opaque),
+                hypothetical account liquidity in excess of collateral requirements,
+     *          hypothetical account shortfall below collateral requirements,
+     *          dynamic liquidation incentive)
+     */
+    function getHypotheticalAccountLiquidityWithPriceUpdate(
+        address account,
+        address kTokenModify,
+        uint256 redeemTokens,
+        uint256 borrowAmount,
+        bytes[] calldata priceUpdateData
+    ) public returns (uint256, uint256, uint256, uint256) {
+        updatePrices(priceUpdateData);
+        return getHypotheticalAccountLiquidity(account, kTokenModify, redeemTokens, borrowAmount);
     }
 
     /*** Admin Functions ***/
@@ -1422,395 +1439,6 @@ contract Comptroller is
         return msg.sender == admin || msg.sender == comptrollerImplementation;
     }
 
-    /*** KEOM Distribution ***/
-
-    /**
-     * @notice Set Reward speed for a single market
-     * @param kToken The market whose Reward speed to update
-     * @param supplySpeed New supply-side Reward speed for market
-     * @param borrowSpeed New borrow-side Reward speed for market
-     */
-    function setRewardSpeedInternal(
-        IKToken kToken,
-        uint256 supplySpeed,
-        uint256 borrowSpeed
-    ) internal {
-        require(markets[address(kToken)].isListed, "market is not listed");
-
-        if (rewardSupplySpeeds[address(kToken)] != supplySpeed) {
-            // Supply speed updated so let's update supply state to ensure that
-            //  1. Reward accrued properly for the old speed, and
-            //  2. Reward accrued at the new speed starts after this block.
-            updateRewardSupplyIndex(address(kToken));
-
-            // Update speed and emit event
-            rewardSupplySpeeds[address(kToken)] = supplySpeed;
-            emit RewardSupplySpeedUpdated(kToken, supplySpeed);
-        }
-
-        if (rewardBorrowSpeeds[address(kToken)] != borrowSpeed) {
-            // Borrow speed updated so let's update borrow state to ensure that
-            //  1. Reward accrued properly for the old speed, and
-            //  2. Reward accrued at the new speed starts after this block.
-            Exp memory borrowIndex = Exp({ mantissa: kToken.borrowIndex() });
-            updateRewardBorrowIndex(address(kToken), borrowIndex);
-
-            // Update speed and emit event
-            rewardBorrowSpeeds[address(kToken)] = borrowSpeed;
-            emit RewardBorrowSpeedUpdated(kToken, borrowSpeed);
-        }
-    }
-
-    function updateAndDistributeSupplierRewardsForToken(
-        address kToken,
-        address account
-    ) public override {
-        updateRewardSupplyIndex(kToken);
-        distributeSupplierReward(kToken, account);
-    }
-
-    function updateAndDistributeBorrowerRewardsForToken(
-        address kToken,
-        address borrower
-    ) public override {
-        Exp memory marketBorrowIndex = Exp({
-            mantissa: IKToken(kToken).borrowIndex()
-        });
-        updateRewardBorrowIndex(kToken, marketBorrowIndex);
-        distributeBorrowerReward(kToken, borrower, marketBorrowIndex);
-    }
-
-    /**
-     * @notice Accrue Reward to the market by updating the supply index
-     * @param kToken The market whose supply index to update
-     * @dev Index is a cumulative sum of the Reward per kToken accrued.
-     */
-    function updateRewardSupplyIndex(address kToken) internal {
-        MarketState storage supplyState = supplyState[kToken];
-        uint256 supplySpeed = rewardSupplySpeeds[kToken];
-        uint32 timestamp = safe32(getTimestamp());
-        uint256 deltaTimestamps = uint256(timestamp) -
-            uint256(supplyState.timestamp);
-        if (deltaTimestamps > 0) {
-            if (supplySpeed > 0) {
-                uint256 supplyTokens = address(boostManager) == address(0)
-                    ? IKToken(kToken).totalSupply()
-                    : boostManager.boostedTotalSupply(kToken);
-                uint256 rewardAccrued = deltaTimestamps * supplySpeed;
-                Double memory ratio = supplyTokens > 0
-                    ? fraction(rewardAccrued, supplyTokens)
-                    : Double({mantissa: 0});
-                supplyState.index = safe224(
-                    add_(Double({mantissa: supplyState.index}), ratio).mantissa
-                );
-            }
-            supplyState.timestamp = timestamp;
-        }
-    }
-
-    /**
-     * @notice Accrue Reward to the market by updating the borrow index
-     * @param kToken The market whose borrow index to update
-     * @dev Index is a cumulative sum of the Reward per kToken accrued.
-     */
-    function updateRewardBorrowIndex(
-        address kToken,
-        Exp memory marketBorrowIndex
-    ) internal {
-        MarketState storage borrowState = borrowState[kToken];
-        uint256 borrowSpeed = rewardBorrowSpeeds[kToken];
-        uint32 timestamp = safe32(getTimestamp());
-        uint256 deltaTimestamps = uint256(timestamp) -
-            uint256(borrowState.timestamp);
-        if (deltaTimestamps > 0) {
-            if (borrowSpeed > 0) {
-                uint256 borrowAmount = div_(
-                    address(boostManager) == address(0)
-                        ? IKToken(kToken).totalBorrows()
-                        : boostManager.boostedTotalBorrows(kToken),
-                    marketBorrowIndex
-                );
-                uint256 rewardAccrued = deltaTimestamps * borrowSpeed;
-                Double memory ratio = borrowAmount > 0
-                    ? fraction(rewardAccrued, borrowAmount)
-                    : Double({mantissa: 0});
-                borrowState.index = safe224(
-                    add_(Double({mantissa: borrowState.index}), ratio).mantissa
-                );
-            }
-            borrowState.timestamp = timestamp;
-        }
-    }
-
-    /**
-     * @notice Calculate Reward accrued by a supplier
-     * @param kToken The market in which the supplier is interacting
-     * @param supplier The address of the supplier to distribute Reward to
-     */
-    function distributeSupplierReward(address kToken, address supplier)
-        internal
-    {
-        // TODO: Don't distribute supplier Reward if the user is not in the supplier market.
-        // This check should be as gas efficient as possible as distributeSupplierReward is called in many places.
-        // - We really don't want to call an external contract as that's quite expensive.
-
-        uint256 supplyIndex = supplyState[kToken].index;
-        uint256 supplierIndex = rewardSupplierIndex[kToken][supplier];
-
-        // Update supplier's index to the current index since we are distributing accrued KEOM
-        rewardSupplierIndex[kToken][supplier] = supplyIndex;
-
-        if (supplierIndex == 0 && supplyIndex >= 0) {
-            return;
-        }
-
-        // Calculate change in the cumulative sum of the Reward per kToken accrued
-        Double memory deltaIndex = Double({
-            mantissa: supplyIndex - supplierIndex
-        });
-
-        uint256 supplierTokens = address(boostManager) == address(0)
-            ? IKToken(kToken).balanceOf(supplier)
-            : boostManager.boostedSupplyBalanceOf(kToken, supplier);
-
-        if (supplyIndex != supplierIndex) {
-            // Calculate Reward accrued: kTokenAmount * accruedPerKToken
-            uint256 supplierDelta = mul_(supplierTokens, deltaIndex);
-
-            uint256 supplierAccrued = rewardAccrued[supplier] + supplierDelta;
-            rewardAccrued[supplier] = supplierAccrued;
-
-            emit DistributedSupplierReward(
-                IKToken(kToken),
-                supplier,
-                supplierDelta,
-                supplyIndex
-            );
-        }
-    }
-
-    /**
-     * @notice Calculate Reward accrued by a borrower
-     * @dev Borrowers will not begin to accrue until after the first interaction with the protocol.
-     * @param kToken The market in which the borrower is interacting
-     * @param borrower The address of the borrower to distribute Reward to
-     */
-    function distributeBorrowerReward(
-        address kToken,
-        address borrower,
-        Exp memory marketBorrowIndex
-    ) internal {
-        // TODO: Don't distribute supplier Reward if the user is not in the borrower market.
-        // This check should be as gas efficient as possible as distributeBorrowerReward is called in many places.
-        // - We really don't want to call an external contract as that's quite expensive.
-
-        uint256 borrowIndex = borrowState[kToken].index;
-        uint256 borrowerIndex = rewardBorrowerIndex[kToken][borrower];
-
-        // Update borrowers's index to the current index since we are distributing accrued KEOM
-        rewardBorrowerIndex[kToken][borrower] = borrowIndex;
-
-        if (borrowerIndex == 0 && borrowIndex >= 0) {
-            return;
-        }
-
-        // Calculate change in the cumulative sum of the Reward per borrowed unit accrued
-        Double memory deltaIndex = Double({
-            mantissa: borrowIndex - borrowerIndex
-        });
-
-        if (borrowIndex != borrowerIndex) {
-            uint256 borrowerAmount = div_(
-                address(boostManager) == address(0)
-                    ? IKToken(kToken).borrowBalanceStored(borrower)
-                    : boostManager.boostedBorrowBalanceOf(kToken, borrower),
-                marketBorrowIndex
-            );
-
-            // Calculate Reward accrued: kTokenAmount * accruedPerBorrowedUnit
-            uint256 borrowerDelta = mul_(borrowerAmount, deltaIndex);
-
-            uint256 borrowerAccrued = rewardAccrued[borrower] + borrowerDelta;
-            rewardAccrued[borrower] = borrowerAccrued;
-
-            emit DistributedBorrowerReward(
-                IKToken(kToken),
-                borrower,
-                borrowerDelta,
-                borrowIndex
-            );
-        }
-    }
-
-    /**
-     * @notice Calculate additional accrued Reward for a contributor since last accrual
-     * @param contributor The address to calculate contributor rewards for
-     */
-    function updateContributorRewards(address contributor) public {
-        uint256 rewardSpeed = rewardContributorSpeeds[contributor];
-        uint256 timestamp = getTimestamp();
-        uint256 deltaTimestamps = timestamp - lastContributorTimestamp[contributor];
-        if (deltaTimestamps > 0 && rewardSpeed > 0) {
-            uint256 newAccrued = deltaTimestamps * rewardSpeed;
-            uint256 contributorAccrued = rewardAccrued[contributor] +
-                newAccrued;
-
-            rewardAccrued[contributor] = contributorAccrued;
-            lastContributorTimestamp[contributor] = timestamp;
-        }
-    }
-
-    /**
-     * @notice Claim all the reward accrued by holder in all markets
-     * @param holder The address to claim Reward for
-     */
-
-    /*function claimReward(address holder) public returns (uint256) {
-        address[] memory holders = new address[](1);
-        holders[0] = holder;
-        claimRewards(holders, allMarkets, true, true);
-        
-        uint256 totalReward = rewardAccrued[holder];
-        rewardAccrued[holder] = grantRewardInternal(holder, totalReward);
-        return totalReward;
-    }*/
-
-    /**
-     * @notice Claim all the reward accrued by holder in the specified markets
-     * @param holder The address to claim Reward for
-     * @param kTokens The list of markets to claim Reward in
-     */
-    /*function claimRewards(address holder, IKToken[] memory kTokens) public {
-        address[] memory holders = new address[](1);
-        holders[0] = holder;
-        claimRewards(holders, kTokens, true, true);
-    }*/
-
-    /**
-     * @notice Claim all reward accrued by the holders
-     * @param holders The addresses to claim Reward for
-     * @param kTokens The list of markets to claim Reward in
-     */
-    /*function claimRewards(
-        address[] memory holders,
-        IKToken[] memory kTokens,
-        bool,
-        bool
-    ) public {
-        for (uint256 i = 0; i < kTokens.length; i++) {
-            require(markets[address(kTokens[i])].isListed, "market must be listed");
-            for (uint256 j = 0; j < holders.length; j++) {
-                updateAndDistributeSupplierRewardsForToken(address(kTokens[i]), holders[j]);
-                updateAndDistributeBorrowerRewardsForToken(address(kTokens[i]), holders[j]);
-            }
-        }
-        for (uint256 j = 0; j < holders.length; j++) {
-            rewardAccrued[holders[j]] = grantRewardInternal(
-                holders[j],
-                rewardAccrued[holders[j]]
-            );
-        }
-    }*/
-
-    /**
-     * @notice Transfer Reward to the user
-     * @dev Note: If there is not enough KEOM, we do not perform the transfer all.
-     * @param user The address of the user to transfer Reward to
-     * @param amount The amount of Reward to (possibly) transfer
-     * @return The amount of Reward which was NOT transferred to the user
-     */
-    function grantRewardInternal(address user, uint256 amount)
-        internal
-        returns (uint256)
-    {
-        IKeom tkn = IKeom(getKeomAddress());
-        if (address(tkn) != address(0)) {
-            uint256 rewardRemaining = tkn.balanceOf(address(this));
-            if (amount > 0 && amount <= rewardRemaining) {
-                tkn.transfer(user, amount);
-                emit KeomClaimed(user, amount);
-                return 0;
-            }
-        }
-
-        return amount;
-    }
-
-    /*** KEOM Distribution Admin ***/
-
-    /**
-     * @notice Transfer Reward to the recipient
-     * @dev Note: If there is not enough KEOM, we do not perform the transfer all.
-     * @param recipient The address of the recipient to transfer Reward to
-     * @param amount The amount of Reward to (possibly) transfer
-     */
-    function _grantReward(address recipient, uint256 amount) public {
-        require(adminOrInitializing(), "only admin can grant reward");
-        uint256 amountLeft = grantRewardInternal(recipient, amount);
-        require(amountLeft == 0, "insufficient token for grant");
-        emit KeomGranted(recipient, amount);
-    }
-
-    /**
-     * @notice Set Reward borrow and supply speeds for the specified markets.
-     * @param kTokens The markets whose Reward speed to update.
-     * @param supplySpeeds New supply-side Reward speed for the corresponding market.
-     * @param borrowSpeeds New borrow-side Reward speed for the corresponding market.
-     */
-    function _setRewardSpeeds(
-        address[] memory kTokens,
-        uint256[] memory supplySpeeds,
-        uint256[] memory borrowSpeeds
-    ) public override {
-        require(
-            msg.sender == admin || msg.sender == rewardUpdater,
-            "unauthorized"
-        );
-
-        uint256 numTokens = kTokens.length;
-        require(
-            numTokens == supplySpeeds.length &&
-                numTokens == borrowSpeeds.length,
-            "_setRewardSpeeds invalid input"
-        );
-
-
-        for (uint256 i = 0; i < numTokens; ++i) {
-            setRewardSpeedInternal(
-                IKToken(kTokens[i]),
-                supplySpeeds[i],
-                borrowSpeeds[i]
-            );
-        }
-    }
-
-    /**
-     * @notice Set Reward speed for a single contributor
-     * @param contributor The contributor whose Reward speed to update
-     * @param rewardSpeed New Reward speed for contributor
-     */
-    /*function _setContributorRewardSpeed(
-        address contributor,
-        uint256 rewardSpeed
-    ) public {
-        require(
-            msg.sender == admin || msg.sender == rewardUpdater,
-            "unauthorized"
-        );
-
-        // note that Reward speed could be set to 0 to halt liquidity rewards for a contributor
-        updateContributorRewards(contributor);
-        if (rewardSpeed == 0) {
-            // release storage
-            delete lastContributorTimestamp[contributor];
-        } else {
-            lastContributorTimestamp[contributor] = getTimestamp();
-        }
-        rewardContributorSpeeds[contributor] = rewardSpeed;
-
-        emit ContributorRewardSpeedUpdated(contributor, rewardSpeed);
-    }*/
-
     /**
      * @notice Return all of the markets
      * @dev The automatic getter may be used to access an individual market.
@@ -1834,45 +1462,6 @@ contract Comptroller is
 
     function getTimestamp() public view returns (uint256) {
         return block.timestamp;
-    }
-
-    /**
-     * @notice Return the address of the KEOM token
-     * @return The address of KEOM
-     */
-    function getKeomAddress() public view returns (address) {
-        return keom;
-    }
-
-    /**
-     * @notice Set the KEOM token address
-     */
-    function setKeomAddress(address newKeomAddress) public onlyAdmin {
-        require(newKeomAddress != address(0), "no zero address allowed");
-        require(keom == address(0), "KEOM already set");
-        keom = newKeomAddress;
-    }
-
-    /**
-     * @notice Set the booster manager address
-     */
-    function setBoostManager(address newBoostManager) public onlyAdmin {
-        require(newBoostManager != address(0), "no zero address allowed");
-        require(address(boostManager) == address(0), "KEOM already set");
-        boostManager = IBoostManager(newBoostManager);
-    }
-
-    function getBoostManager() external view override returns (address) {
-        return address(boostManager);
-    }
-
-    function setRewardUpdater(address _rewardUpdater) public onlyAdmin {
-        require(_rewardUpdater != address(0), "no zero address allowed");
-        rewardUpdater = _rewardUpdater;
-    }
-
-    function setAutoCollaterize(address market, bool flag) external onlyAdmin {
-        markets[market].autoCollaterize = flag;
     }
 
     /**

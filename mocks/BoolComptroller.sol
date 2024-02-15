@@ -2,7 +2,7 @@
 pragma solidity 0.8.4;
 
 import "../interfaces/IComptroller.sol";
-import "../oracles/chainlink/PriceOracle.sol";
+import "../oracles/PriceOracle.sol";
 
 
 contract BoolComptroller is IComptroller {
@@ -34,7 +34,9 @@ contract BoolComptroller is IComptroller {
 
     /*** Assets You Are In ***/
 
-    function enterMarkets(address[] calldata _kTokens) external override returns (uint[] memory) {
+    function enterMarkets(
+        address[] calldata _kTokens
+    ) external override returns (uint[] memory) {
         _kTokens;
         uint[] memory ret;
         return ret;
@@ -47,14 +49,23 @@ contract BoolComptroller is IComptroller {
 
     /*** Policy Hooks ***/
 
-    function mintAllowed(address _kToken, address _minter, uint _mintAmount) public override returns (uint) {
+    function mintAllowed(
+        address _kToken,
+        address _minter,
+        uint _mintAmount
+    ) public override returns (uint) {
         _kToken;
         _minter;
         _mintAmount;
         return allowMint ? noError : opaqueError;
     }
 
-    function mintVerify(address _kToken, address _minter, uint _mintAmount, uint _mintTokens) external {
+    function mintVerify(
+        address _kToken,
+        address _minter,
+        uint _mintAmount,
+        uint _mintTokens
+    ) external {
         _kToken;
         _minter;
         _mintAmount;
@@ -62,14 +73,23 @@ contract BoolComptroller is IComptroller {
         require(verifyMint, "mintVerify rejected mint");
     }
 
-    function redeemAllowed(address _kToken, address _redeemer, uint _redeemTokens) public override returns (uint) {
+    function redeemAllowed(
+        address _kToken,
+        address _redeemer,
+        uint _redeemTokens
+    ) public override returns (uint) {
         _kToken;
         _redeemer;
         _redeemTokens;
         return allowRedeem ? noError : opaqueError;
     }
 
-    function redeemVerify(address _kToken, address _redeemer, uint _redeemAmount, uint _redeemTokens) external override {
+    function redeemVerify(
+        address _kToken,
+        address _redeemer,
+        uint _redeemAmount,
+        uint _redeemTokens
+    ) external override {
         _kToken;
         _redeemer;
         _redeemAmount;
@@ -77,14 +97,22 @@ contract BoolComptroller is IComptroller {
         require(verifyRedeem, "redeemVerify rejected redeem");
     }
 
-    function borrowAllowed(address _kToken, address _borrower, uint _borrowAmount) public override returns (uint) {
+    function borrowAllowed(
+        address _kToken,
+        address _borrower,
+        uint _borrowAmount
+    ) public override returns (uint) {
         _kToken;
         _borrower;
         _borrowAmount;
         return allowBorrow ? noError : opaqueError;
     }
 
-    function borrowVerify(address _kToken, address _borrower, uint _borrowAmount) external {
+    function borrowVerify(
+        address _kToken,
+        address _borrower,
+        uint _borrowAmount
+    ) external {
         _kToken;
         _borrower;
         _borrowAmount;
@@ -95,7 +123,8 @@ contract BoolComptroller is IComptroller {
         address _kToken,
         address _payer,
         address _borrower,
-        uint _repayAmount) public override returns (uint) {
+        uint _repayAmount
+    ) public override returns (uint) {
         _kToken;
         _payer;
         _borrower;
@@ -108,7 +137,8 @@ contract BoolComptroller is IComptroller {
         address _payer,
         address _borrower,
         uint _repayAmount,
-        uint _borrowerIndex) external {
+        uint _borrowerIndex
+    ) external {
         _kToken;
         _payer;
         _borrower;
@@ -122,7 +152,8 @@ contract BoolComptroller is IComptroller {
         address _kTokenCollateral,
         address _liquidator,
         address _borrower,
-        uint _repayAmount) public override returns (uint, uint) {
+        uint _repayAmount
+    ) public override returns (uint, uint) {
         _kTokenBorrowed;
         _kTokenCollateral;
         _liquidator;
@@ -137,14 +168,18 @@ contract BoolComptroller is IComptroller {
         address _liquidator,
         address _borrower,
         uint _repayAmount,
-        uint _seizeTokens) external {
+        uint _seizeTokens
+    ) external {
         _kTokenBorrowed;
         _kTokenCollateral;
         _liquidator;
         _borrower;
         _repayAmount;
         _seizeTokens;
-        require(verifyLiquidateBorrow, "liquidateBorrowVerify rejected liquidateBorrow");
+        require(
+            verifyLiquidateBorrow,
+            "liquidateBorrowVerify rejected liquidateBorrow"
+        );
     }
 
     function seizeAllowed(
@@ -152,7 +187,8 @@ contract BoolComptroller is IComptroller {
         address _kTokenBorrowed,
         address _borrower,
         address _liquidator,
-        uint _seizeTokens) public override returns (uint) {
+        uint _seizeTokens
+    ) public override returns (uint) {
         _kTokenCollateral;
         _kTokenBorrowed;
         _liquidator;
@@ -166,7 +202,8 @@ contract BoolComptroller is IComptroller {
         address _kTokenBorrowed,
         address _liquidator,
         address _borrower,
-        uint _seizeTokens) external {
+        uint _seizeTokens
+    ) external {
         _kTokenCollateral;
         _kTokenBorrowed;
         _liquidator;
@@ -179,7 +216,8 @@ contract BoolComptroller is IComptroller {
         address _kToken,
         address _src,
         address _dst,
-        uint _transferTokens) public override returns (uint) {
+        uint _transferTokens
+    ) public override returns (uint) {
         _kToken;
         _src;
         _dst;
@@ -191,7 +229,8 @@ contract BoolComptroller is IComptroller {
         address _kToken,
         address _src,
         address _dst,
-        uint _transferTokens) external {
+        uint _transferTokens
+    ) external view {
         _kToken;
         _src;
         _dst;
@@ -202,7 +241,7 @@ contract BoolComptroller is IComptroller {
     function updateAndDistributeBorrowerRewardsForToken(
         address kToken,
         address borrower
-    ) external override {
+    ) external pure {
         kToken;
         borrower;
         return;
@@ -211,7 +250,7 @@ contract BoolComptroller is IComptroller {
     function updateAndDistributeSupplierRewardsForToken(
         address kToken,
         address account
-    ) external override {
+    ) external pure {
         kToken;
         account;
         return;
@@ -221,21 +260,27 @@ contract BoolComptroller is IComptroller {
         address[] memory kTokens,
         uint256[] memory supplySpeeds,
         uint256[] memory borrowSpeeds
-    ) external override {
+    ) external pure {
         kTokens;
         supplySpeeds;
         borrowSpeeds;
         return;
     }
 
-    function getBoostManager() external view override returns(address) {
+    function getBoostManager() external pure returns (address) {
         return address(0);
     }
-    function getAllMarkets() external view override returns(IKToken[] memory tokens) {
+
+    function getAllMarkets()
+        external
+        pure
+        override
+        returns (IKToken[] memory tokens)
+    {
         return tokens;
     }
 
-    function isMarket(address market) external view override returns(bool) {
+    function isMarket(address market) external pure override returns (bool) {
         return true;
     }
 
@@ -245,11 +290,15 @@ contract BoolComptroller is IComptroller {
         address _kTokenBorrowed,
         address _kTokenCollateral,
         uint _repayAmount,
-        uint dynamicLiquidationIncentive) public view override returns (uint, uint) {
+        uint dynamicLiquidationIncentive
+    ) public view override returns (uint, uint) {
         _kTokenBorrowed;
         _kTokenCollateral;
         _repayAmount;
-        return failCalculateSeizeTokens ? (opaqueError, 0) : (noError, calculatedSeizeTokens);
+        return
+            failCalculateSeizeTokens
+                ? (opaqueError, 0)
+                : (noError, calculatedSeizeTokens);
     }
 
     /**** Mock Settors ****/
@@ -321,4 +370,6 @@ contract BoolComptroller is IComptroller {
     function setFailCalculateSeizeTokens(bool shouldFail) public {
         failCalculateSeizeTokens = shouldFail;
     }
+
+    function updatePrices(bytes[] calldata priceUpdateData) external override {}
 }

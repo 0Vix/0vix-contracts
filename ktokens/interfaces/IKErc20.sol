@@ -15,7 +15,6 @@ interface IKErc20 {
     function repayBorrow(uint repayAmount) external;
     function repayBorrowBehalf(address borrower, uint repayAmount) external;
     function liquidateBorrow(address borrower, uint repayAmount, IKToken kTokenCollateral) external;
-    function sweepToken(IEIP20NonStandard token) external;
 
     function underlying() external view returns(address);
 

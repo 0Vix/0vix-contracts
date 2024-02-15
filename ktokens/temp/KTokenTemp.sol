@@ -8,7 +8,6 @@ import "../../libraries/ErrorReporter.sol";
 import "../../libraries/Exponential.sol";
 import "../interfaces/IEIP20.sol";
 import "../../interest-rate-models/interfaces/IInterestRateModel.sol";
-import "../../vote-escrow/interfaces/IBoostManager.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 import "../interfaces/IKTokenTemp.sol";
 
@@ -73,44 +72,6 @@ abstract contract KTokenTemp is KTokenStorage, Exponential, TokenErrorReporter, 
         _notEntered = true;
     }
 
-    function _updateBoostSupplyBalances(
-        address user,
-        uint256 oldBalance,
-        uint256 newBalance
-    ) internal {
-        address boostManager = comptroller.getBoostManager();
-        if (
-            boostManager != address(0) &&
-            IBoostManager(boostManager).isAuthorized(address(this))
-        ) {
-            IBoostManager(boostManager).updateBoostSupplyBalances(
-                address(this),
-                user,
-                oldBalance,
-                newBalance
-            );
-        }
-    }
-
-    function _updateBoostBorrowBalances(
-        address user,
-        uint256 oldBalance,
-        uint256 newBalance
-    ) internal {
-        address boostManager = comptroller.getBoostManager();
-        if (
-            boostManager != address(0) &&
-            IBoostManager(boostManager).isAuthorized(address(this))
-        ) {
-            IBoostManager(boostManager).updateBoostBorrowBalances(
-                address(this),
-                user,
-                oldBalance,
-                newBalance
-            );
-        }
-    }
-
     /**
      * @notice Transfer `tokens` tokens from `src` to `dst` by `spender`
      * @dev Called by both `transfer` and `transferFrom` internally
@@ -173,9 +134,6 @@ abstract contract KTokenTemp is KTokenStorage, Exponential, TokenErrorReporter, 
         /////////////////////////
         // EFFECTS & INTERACTIONS
         // (No safe failures beyond this point)
-
-        _updateBoostSupplyBalances(src, accountTokens[src], srkTokensNew);
-        _updateBoostSupplyBalances(dst, accountTokens[dst], dstTokensNew);
 
         accountTokens[src] = srkTokensNew;
         accountTokens[dst] = dstTokensNew;
@@ -828,12 +786,6 @@ abstract contract KTokenTemp is KTokenStorage, Exponential, TokenErrorReporter, 
             "MINT_NEW_ACCOUNT_BALANCE_FAILED"
         );
 
-        _updateBoostSupplyBalances(
-            minter,
-            accountTokens[minter],
-            accountTokensNew
-        );
-
         /* We write previously calculated values into storage */
         totalSupply = totalSupplyNew;
         accountTokens[minter] = accountTokensNew;
@@ -1069,12 +1021,6 @@ abstract contract KTokenTemp is KTokenStorage, Exponential, TokenErrorReporter, 
         /////////////////////////
         // EFFECTS & INTERACTIONS
         // (No safe failures beyond this point)
-
-        _updateBoostSupplyBalances(
-            redeemer,
-            accountTokens[redeemer],
-            vars.accountTokensNew
-        );
         /* We write previously calculated values into storage */
         totalSupply = vars.totalSupplyNew;
         accountTokens[redeemer] = vars.accountTokensNew;
@@ -1219,12 +1165,6 @@ abstract contract KTokenTemp is KTokenStorage, Exponential, TokenErrorReporter, 
 
         /* We emit a Borrow event */
         emit Borrow(borrower, borrowAmount, accountBorrowsNew, totalBorrowsNew);
-
-        _updateBoostBorrowBalances(
-            borrower,
-            oldBorrowedBalance,
-            accountBorrowsNew
-        );
 
         /* We call the defense hook */
         // unused function
@@ -1422,11 +1362,7 @@ abstract contract KTokenTemp is KTokenStorage, Exponential, TokenErrorReporter, 
             vars.accountBorrowsNew,
             vars.totalBorrowsNew
         );
-        _updateBoostBorrowBalances(
-            borrower,
-            oldBorrowedBalance,
-            vars.accountBorrowsNew
-        );
+
 
         /* We call the defense hook */
         // unused function
@@ -1790,17 +1726,6 @@ abstract contract KTokenTemp is KTokenStorage, Exponential, TokenErrorReporter, 
         // (No safe failures beyond this point)
 
         /* We write the previously calculated values into storage */
-        _updateBoostSupplyBalances(
-            borrower,
-            accountTokens[borrower],
-            vars.borrowerTokensNew
-        );
-        _updateBoostSupplyBalances(
-            liquidator,
-            accountTokens[liquidator],
-            vars.liquidatorTokensNew
-        );
-
         totalReserves = vars.totalReservesNew;
         totalSupply = vars.totalSupplyNew;
         accountTokens[borrower] = vars.borrowerTokensNew;

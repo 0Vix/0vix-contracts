@@ -135,22 +135,6 @@ contract KErc20Temp is KTokenTemp, KErc20Storage {
     }
 
     /**
-     * @notice A public function to sweep accidental ERC-20 transfers to this contract. Tokens are sent to admin (timelock)
-     * @param token The address of the ERC-20 token to sweep
-     */
-    function sweepToken(IEIP20NonStandard token) external override {
-        require(
-            address(token) != underlying,
-            "KErc20::sweepToken: can not sweep underlying token"
-        );
-        uint256 underlyingBalanceBefore = IEIP20(underlying).balanceOf(address(this));
-        uint256 balance = token.balanceOf(address(this));
-        token.transfer(admin, balance);
-
-        require(underlyingBalanceBefore == IEIP20(underlying).balanceOf(address(this)), "underlying balance changed");
-    }
-
-    /**
      * @notice The sender adds to reserves.
      * @param addAmount The amount fo underlying token to add as reserves
      * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)

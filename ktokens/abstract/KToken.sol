@@ -8,7 +8,6 @@ import "../../libraries/ErrorReporter.sol";
 import "../../libraries/Exponential.sol";
 import "../interfaces/IEIP20.sol";
 import "../../interest-rate-models/interfaces/IInterestRateModel.sol";
-import "../../vote-escrow/interfaces/IBoostManager.sol";
 import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
 
 /**
@@ -70,22 +69,6 @@ abstract contract KToken is KTokenStorage, Exponential, TokenErrorReporter, Init
 
         // The counter starts true to prevent changing it from zero to non-zero (i.e. smaller cost/refund)
         _notEntered = true;
-    }
-
-    function _updateBoostSupplyBalances(
-        address user,
-        uint256 oldBalance,
-        uint256 newBalance
-    ) internal {
-
-    }
-
-    function _updateBoostBorrowBalances(
-        address user,
-        uint256 oldBalance,
-        uint256 newBalance
-    ) internal {
-  
     }
 
     /**
@@ -150,9 +133,6 @@ abstract contract KToken is KTokenStorage, Exponential, TokenErrorReporter, Init
         /////////////////////////
         // EFFECTS & INTERACTIONS
         // (No safe failures beyond this point)
-
-        _updateBoostSupplyBalances(src, accountTokens[src], srkTokensNew);
-        _updateBoostSupplyBalances(dst, accountTokens[dst], dstTokensNew);
 
         accountTokens[src] = srkTokensNew;
         accountTokens[dst] = dstTokensNew;
@@ -805,12 +785,6 @@ abstract contract KToken is KTokenStorage, Exponential, TokenErrorReporter, Init
             "MINT_NEW_ACCOUNT_BALANCE_FAILED"
         );
 
-        _updateBoostSupplyBalances(
-            minter,
-            accountTokens[minter],
-            accountTokensNew
-        );
-
         /* We write previously calculated values into storage */
         totalSupply = totalSupplyNew;
         accountTokens[minter] = accountTokensNew;
@@ -818,10 +792,6 @@ abstract contract KToken is KTokenStorage, Exponential, TokenErrorReporter, Init
         /* We emit a Mint event, and a Transfer event */
         emit Mint(minter, actualMintAmount, mintTokens);
         emit Transfer(address(0), minter, mintTokens);
-
-        /* We call the defense hook */
-        // unused function
-        // comptroller.mintVerify(address(this), minter, vars.actualMintAmount, vars.mintTokens);
 
         return (uint256(Error.NO_ERROR), actualMintAmount);
     }
@@ -1047,11 +1017,6 @@ abstract contract KToken is KTokenStorage, Exponential, TokenErrorReporter, Init
         // EFFECTS & INTERACTIONS
         // (No safe failures beyond this point)
 
-        _updateBoostSupplyBalances(
-            redeemer,
-            accountTokens[redeemer],
-            vars.accountTokensNew
-        );
         /* We write previously calculated values into storage */
         totalSupply = vars.totalSupplyNew;
         accountTokens[redeemer] = vars.accountTokensNew;
@@ -1160,7 +1125,6 @@ abstract contract KToken is KTokenStorage, Exponential, TokenErrorReporter, Init
                     uint256(mathErr)
                 );
         }
-        uint256 oldBorrowedBalance = _accountBorrows;
 
         uint256 accountBorrowsNew;
         (mathErr, accountBorrowsNew) = addUInt(_accountBorrows, borrowAmount);
@@ -1196,12 +1160,6 @@ abstract contract KToken is KTokenStorage, Exponential, TokenErrorReporter, Init
 
         /* We emit a Borrow event */
         emit Borrow(borrower, borrowAmount, accountBorrowsNew, totalBorrowsNew);
-
-        _updateBoostBorrowBalances(
-            borrower,
-            oldBorrowedBalance,
-            accountBorrowsNew
-        );
 
         /* We call the defense hook */
         // unused function
@@ -1322,7 +1280,6 @@ abstract contract KToken is KTokenStorage, Exponential, TokenErrorReporter, Init
         }
 
         RepayBorrowLocalVars memory vars;
-        uint256 oldBorrowedBalance = borrowBalanceStored(borrower);
 
         /* We remember the original borrowerIndex for verification purposes */
         vars.borrowerIndex = accountBorrows[borrower].interestIndex;
@@ -1398,11 +1355,6 @@ abstract contract KToken is KTokenStorage, Exponential, TokenErrorReporter, Init
             vars.actualRepayAmount,
             vars.accountBorrowsNew,
             vars.totalBorrowsNew
-        );
-        _updateBoostBorrowBalances(
-            borrower,
-            oldBorrowedBalance,
-            vars.accountBorrowsNew
         );
 
         /* We call the defense hook */
@@ -1782,30 +1734,94 @@ abstract contract KToken is KTokenStorage, Exponential, TokenErrorReporter, Init
             vars.totalReservesNew
         );
 
-        /* We call the defense hook */
-        // unused function
-        // comptroller.seizeVerify(address(this), seizerToken, liquidator, borrower, seizeTokens);
-
         return uint256(Error.NO_ERROR);
+    }
+
+    /*** Functions with price update ***/
+
+    /**
+     * @notice Sender borrows assets from the protocol to their own address and updates prices at Pyth's oracle
+     * @param borrowAmount The amount of the underlying asset to borrow
+     * @param priceUpdateData data for updating prices on Pyth smart contract
+     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+     */
+    function borrowWithPriceUpdate(uint256 borrowAmount, bytes[] calldata priceUpdateData)
+        external
+        returns (uint256)
+    {
+        comptroller.updatePrices(priceUpdateData);
+        return borrowInternal(borrowAmount);
+    }
+
+    /**
+     * @notice Sender redeems kTokens in exchange for the underlying asset and updates prices at Pyth's oracle
+     * @param redeemTokens The number of kTokens to redeem into underlying
+     * @param priceUpdateData data for updating prices on Pyth smart contract
+     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+     */
+    function redeemWithPriceUpdate(uint256 redeemTokens, bytes[] calldata priceUpdateData)
+        external
+        returns (uint256)
+    {
+        comptroller.updatePrices(priceUpdateData);
+        return redeemInternal(redeemTokens);
+    }
+
+    /**
+     * @notice Sender redeems kTokens in exchange for a specified amount of underlying asset and updates prices at Pyth's oracle
+     * @param redeemAmount The amount of underlying to receive from redeeming kTokens
+     * @param priceUpdateData data for updating prices on Pyth smart contract
+     * @return uint 0=success, otherwise a failure (see ErrorReporter.sol for details)
+     */
+    function redeemUnderlyingWithPriceUpdate(uint256 redeemAmount, bytes[] calldata priceUpdateData)
+        external
+        returns (uint256)
+    {
+        comptroller.updatePrices(priceUpdateData);
+        return redeemUnderlyingInternal(redeemAmount);
+    }
+
+    /**
+     * @notice Transfer `amount` tokens from `msg.sender` to `dst` with updating prices at Pyth's oracle
+     * @param dst The address of the destination account
+     * @param amount The number of tokens to transfer
+     * @param priceUpdateData data for updating prices on Pyth smart contract
+     * @return Whether or not the transfer succeeded
+     */
+    function transferWithPriceUpdate(address dst, uint256 amount, bytes[] calldata priceUpdateData)
+        external
+        nonReentrant
+        returns (bool)
+    {
+        comptroller.updatePrices(priceUpdateData);
+        return
+            transferTokens(msg.sender, msg.sender, dst, amount) ==
+            uint256(Error.NO_ERROR);
+    }
+
+    /**
+     * @notice Transfer `amount` tokens from `src` to `dst` with updating prices at Pyth's oracle
+     * @param src The address of the source account
+     * @param dst The address of the destination account
+     * @param amount The number of tokens to transfer
+     * @param priceUpdateData data for updating prices on Pyth smart contract
+     * @return Whether or not the transfer succeeded
+     */
+    function transferFromWithPriceUpdate(
+        address src,
+        address dst,
+        uint256 amount,
+        bytes[] calldata priceUpdateData
+    ) external nonReentrant returns (bool) {
+        comptroller.updatePrices(priceUpdateData);
+        return
+            transferTokens(msg.sender, src, dst, amount) ==
+            uint256(Error.NO_ERROR);
     }
 
     /*** Admin Functions ***/
     function unauthorized(FailureInfo info) internal returns (uint) {
         return fail(Error.UNAUTHORIZED, info);
-    }
-
-    function setAdmin(address payable _admin) public {
-        require(msg.sender == admin, "Unauthorized");
-        address oldAdmin = admin;
-        admin = _admin;
-        emit NewAdmin(oldAdmin, admin);
-    }
-
-    function _setNameAndSymbol(string calldata _name, string calldata _symbol) external
-    {
-        require(msg.sender == admin, "unauthorized");
-        name = _name;
-        symbol = _symbol;
     }
 
     /**

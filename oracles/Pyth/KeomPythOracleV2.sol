@@ -7,7 +7,6 @@ import "../../ktokens/interfaces/IEIP20.sol";
 import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
 import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "../chainlink/interfaces/IAggregatorV2V3.sol";
 
 contract KeomPythOracle is Ownable, PriceOracle {
     ///@dev valid Period for our oracle updates
@@ -26,10 +25,6 @@ contract KeomPythOracle is Ownable, PriceOracle {
     mapping(bytes32 => uint256) public heartbeats;
     /// @dev KToken => Pyth's Token ID
     mapping(address => bytes32) public getFeed;
-    /// @dev custom feed => heartbeat
-    mapping(IAggregatorV2V3 => uint256) public customFeedHeartbeats;
-    /// @dev KToken => custom feed address
-    mapping(address => IAggregatorV2V3) public customFeeds;
     /// @dev KToken => Our Token Data
     mapping(address => PriceData) public prices;
 
@@ -37,7 +32,6 @@ contract KeomPythOracle is Ownable, PriceOracle {
 
     event NewAdmin(address oldAdmin, address newAdmin);
     event TokenIdSet(bytes32 tokenId, address kToken);
-    event CustomFeedSet(IAggregatorV2V3 customFeed, address kToken);
     event PricePosted(
         address asset,
         uint256 previousPrice,
@@ -45,7 +39,6 @@ contract KeomPythOracle is Ownable, PriceOracle {
         uint256 updatedAt
     );
     event HeartbeatSet(bytes32 tokenId, uint256 heartbeat);
-    event CustomFeedHeartbeatSet(IAggregatorV2V3 customFeed, uint256 heartbeat);
     event ValidPeriodSet(uint256 validPeriod);
     event ONativeSet(address kNative);
 
@@ -81,13 +74,10 @@ contract KeomPythOracle is Ownable, PriceOracle {
     /// @return price with 36 - tokenDecimals decimals
     function _getPrice(address kToken) internal view returns (uint256 price) {
         IEIP20 token = IEIP20(KErc20(address(kToken)).underlying());
-        
+
         bytes32 tokenId = getFeed[kToken];
-        IAggregatorV2V3 customFeed = customFeeds[kToken];
         if (tokenId != bytes32(0)) {
             price = _getPythPrice(tokenId);
-        } else if(address(customFeed) != address(0)) {
-            price = _getCustomPrice(customFeed);
         } else if (
             prices[address(kToken)].updatedAt >= block.timestamp - validPeriod
         ) {
@@ -109,17 +99,6 @@ contract KeomPythOracle is Ownable, PriceOracle {
         return
             uint256(int256(priceData.price)) *
             (10**(18 - _abs(priceData.expo)));
-    }
-
-    function _getCustomPrice(IAggregatorV2V3 customFeed) internal view returns (uint256) {
-        (, int256 answer, , uint256 updateAt, ) = customFeed.latestRoundData();
-        require(
-            block.timestamp < updateAt + (customFeedHeartbeats[customFeed]),
-            "Update time (heartbeat) exceeded"
-        );
-        return
-            uint256(int256(answer)) *
-            (10**(18 - customFeed.decimals()));
     }
 
     //************ * ฅ^•ﻌ•^ฅ  SETTERS  ฅ^•ﻌ•^ฅ * ************//
@@ -149,6 +128,11 @@ contract KeomPythOracle is Ownable, PriceOracle {
         );
     }
 
+    function updateUnderlyingPrices(bytes[] calldata priceUpdateData) external override {
+        uint256 fee = pyth.getUpdateFee(priceUpdateData);
+        pyth.updatePriceFeeds{ value: fee }(priceUpdateData);
+    }
+
     function setTokenId(
         address _kToken,
         bytes32 _tokenId,
@@ -161,35 +145,13 @@ contract KeomPythOracle is Ownable, PriceOracle {
         emit HeartbeatSet(_tokenId, _heartbeat);
     }
 
-    function setCustomFeed(
-        address _kToken,
-        IAggregatorV2V3 _customFeed,
-        uint256 _heartbeat
-    ) external onlyOwner {
-        require(address(_customFeed) != address(0), "invalid custom feed");
-        customFeedHeartbeats[_customFeed] = _heartbeat;
-        customFeeds[_kToken] = _customFeed;
-        emit CustomFeedSet(_customFeed, _kToken);
-        emit CustomFeedHeartbeatSet(_customFeed, _heartbeat);
-    }
-
     function setHeartbeat(address kToken, uint256 heartbeat)
         external
         onlyOwner
     {
         bytes32 tokenId = getFeed[kToken];
-        if(tokenId != bytes32(0)) {
-            heartbeats[tokenId] = heartbeat;
-            emit HeartbeatSet(tokenId, heartbeat);
-            return;
-        }
-
-        IAggregatorV2V3 customFeed = customFeeds[kToken];
-        if(address(customFeed) != address(0)) {
-            customFeedHeartbeats[customFeed] = heartbeat;
-            emit CustomFeedHeartbeatSet(customFeed, heartbeat);
-            return;
-        }
+        heartbeats[tokenId] = heartbeat;
+        emit HeartbeatSet(tokenId, heartbeat);
     }
 
     function setValidPeriod(uint256 period) external onlyOwner {
@@ -200,11 +162,6 @@ contract KeomPythOracle is Ownable, PriceOracle {
     function setONative(address _kNative) external onlyOwner {
         kNative = _kNative;
         emit ONativeSet(_kNative);
-    }
-
-    function updateUnderlyingPrices(bytes[] calldata priceUpdateData) external override {
-        uint256 fee = pyth.getUpdateFee(priceUpdateData);
-        pyth.updatePriceFeeds{ value: fee }(priceUpdateData);
     }
 
     //************ * ฅ^•ﻌ•^ฅ  UTILS  ฅ^•ﻌ•^ฅ * ************//

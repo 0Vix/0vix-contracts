@@ -8,7 +8,6 @@ import "../../libraries/ErrorReporter.sol";
 import "../../libraries/Exponential.sol";
 import "../interfaces/IEIP20.sol";
 import "../../interest-rate-models/interfaces/IInterestRateModel.sol";
-import "../../vote-escrow/interfaces/IBoostManager.sol";
 
 /**
  * @title 0VIX's OToken Contract
@@ -69,44 +68,6 @@ abstract contract OTokenTempOld is KTokenStorage, Exponential, TokenErrorReporte
 
         // The counter starts true to prevent changing it from zero to non-zero (i.e. smaller cost/refund)
         _notEntered = true;
-    }
-
-    function _updateBoostSupplyBalances(
-        address user,
-        uint256 oldBalance,
-        uint256 newBalance
-    ) internal {
-        address boostManager = comptroller.getBoostManager();
-        if (
-            boostManager != address(0) &&
-            IBoostManager(boostManager).isAuthorized(address(this))
-        ) {
-            IBoostManager(boostManager).updateBoostSupplyBalances(
-                address(this),
-                user,
-                oldBalance,
-                newBalance
-            );
-        }
-    }
-
-    function _updateBoostBorrowBalances(
-        address user,
-        uint256 oldBalance,
-        uint256 newBalance
-    ) internal {
-        address boostManager = comptroller.getBoostManager();
-        if (
-            boostManager != address(0) &&
-            IBoostManager(boostManager).isAuthorized(address(this))
-        ) {
-            IBoostManager(boostManager).updateBoostBorrowBalances(
-                address(this),
-                user,
-                oldBalance,
-                newBalance
-            );
-        }
     }
 
     /**
@@ -171,9 +132,6 @@ abstract contract OTokenTempOld is KTokenStorage, Exponential, TokenErrorReporte
         /////////////////////////
         // EFFECTS & INTERACTIONS
         // (No safe failures beyond this point)
-
-        _updateBoostSupplyBalances(src, accountTokens[src], srcTokensNew);
-        _updateBoostSupplyBalances(dst, accountTokens[dst], dstTokensNew);
 
         accountTokens[src] = srcTokensNew;
         accountTokens[dst] = dstTokensNew;
@@ -826,12 +784,6 @@ abstract contract OTokenTempOld is KTokenStorage, Exponential, TokenErrorReporte
             "MINT_NEW_ACCOUNT_BALANCE_FAILED"
         );
 
-        _updateBoostSupplyBalances(
-            minter,
-            accountTokens[minter],
-            accountTokensNew
-        );
-
         /* We write previously calculated values into storage */
         totalSupply = totalSupplyNew;
         accountTokens[minter] = accountTokensNew;
@@ -1068,11 +1020,6 @@ abstract contract OTokenTempOld is KTokenStorage, Exponential, TokenErrorReporte
         // EFFECTS & INTERACTIONS
         // (No safe failures beyond this point)
 
-        _updateBoostSupplyBalances(
-            redeemer,
-            accountTokens[redeemer],
-            vars.accountTokensNew
-        );
         /* We write previously calculated values into storage */
         totalSupply = vars.totalSupplyNew;
         accountTokens[redeemer] = vars.accountTokensNew;
@@ -1217,12 +1164,6 @@ abstract contract OTokenTempOld is KTokenStorage, Exponential, TokenErrorReporte
 
         /* We emit a Borrow event */
         emit Borrow(borrower, borrowAmount, accountBorrowsNew, totalBorrowsNew);
-
-        _updateBoostBorrowBalances(
-            borrower,
-            oldBorrowedBalance,
-            accountBorrowsNew
-        );
 
         /* We call the defense hook */
         // unused function
@@ -1419,11 +1360,6 @@ abstract contract OTokenTempOld is KTokenStorage, Exponential, TokenErrorReporte
             vars.actualRepayAmount,
             vars.accountBorrowsNew,
             vars.totalBorrowsNew
-        );
-        _updateBoostBorrowBalances(
-            borrower,
-            oldBorrowedBalance,
-            vars.accountBorrowsNew
         );
 
         /* We call the defense hook */
@@ -1642,16 +1578,6 @@ abstract contract OTokenTempOld is KTokenStorage, Exponential, TokenErrorReporte
         // (No safe failures beyond this point)
 
         /* We write the previously calculated values into storage */
-        _updateBoostSupplyBalances(
-            borrower,
-            accountTokens[borrower],
-            vars.borrowerTokensNew
-        );
-        _updateBoostSupplyBalances(
-            liquidator,
-            accountTokens[liquidator],
-            vars.liquidatorTokensNew
-        );
 
         totalReserves = vars.totalReservesNew;
         totalSupply = vars.totalSupplyNew;

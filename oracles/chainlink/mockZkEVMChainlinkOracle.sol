@@ -4,7 +4,9 @@ pragma solidity 0.8.4;
 import "./interfaces/IAggregatorV2V3.sol";
 import "../../ktokens/KErc20.sol";
 import "../../ktokens/interfaces/IEIP20.sol";
-import "./PriceOracle.sol";
+import "../PriceOracle.sol";
+
+error NotImplemented();
 
 /**
  * @title MockV3Aggregator **modified**
@@ -14,6 +16,7 @@ import "./PriceOracle.sol";
  * aggregator contract, but how the aggregator got
  * its answer is unimportant
  */
+
 
 contract MockV3Aggregator is IAggregatorV2V3, PriceOracle {
     error isoWETH();
@@ -262,6 +265,10 @@ contract MockV3Aggregator is IAggregatorV2V3, PriceOracle {
 
     function _setAdmin(address _admin) internal {
         admin = _admin;
+    }
+
+    function updateUnderlyingPrices(bytes[] calldata) external pure override {
+        revert NotImplemented();
     }
     // @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ private @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ //
 }

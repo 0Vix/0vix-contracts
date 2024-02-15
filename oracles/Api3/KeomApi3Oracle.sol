@@ -1,12 +1,14 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import { PriceOracle } from "../chainlink/PriceOracle.sol";
+import { PriceOracle } from "../PriceOracle.sol";
 import { KErc20 } from "../../ktokens/KErc20.sol";
 import { IKToken } from "../../ktokens/interfaces/IKToken.sol";
 import { IEIP20 } from "../../ktokens/interfaces/IEIP20.sol";
 import { IApi3Server } from "./interfaces/IApi3Server.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+
+error NotImplemented();
 
 contract KeomApi3Oracle is Ownable, PriceOracle {
     ///@dev kToken from chain's native asset
@@ -77,5 +79,9 @@ contract KeomApi3Oracle is Ownable, PriceOracle {
     function setKNative(address _kNative) external onlyOwner {
         kNative = _kNative;
         emit KNativeSet(_kNative);
+    }
+
+    function updateUnderlyingPrices(bytes[] calldata) external pure override {
+        revert NotImplemented();
     }
 }

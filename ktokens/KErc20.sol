@@ -135,19 +135,27 @@ contract KErc20 is KToken, KErc20Storage {
     }
 
     /**
-     * @notice A public function to sweep accidental ERC-20 transfers to this contract. Tokens are sent to admin (timelock)
-     * @param token The address of the ERC-20 token to sweep
+     * @notice The sender liquidates the borrowers collateral and updates prices at Pyth's oracle.
+     *  The collateral seized is transferred to the liquidator.
+     * @param borrower The borrower of this kToken to be liquidated
+     * @param repayAmount The amount of the underlying borrowed asset to repay
+     * @param kTokenCollateral The market in which to seize collateral from the borrower
+     * @param priceUpdateData data for updating prices on Pyth smart contract
+     * @dev Reverts upon any failure
      */
-    function sweepToken(IEIP20NonStandard token) external override {
-        require(
-            address(token) != underlying,
-            "KErc20::sweepToken: can not sweep underlying token"
+    function liquidateBorrowWithPriceUpdate(
+        address borrower,
+        uint256 repayAmount,
+        IKToken kTokenCollateral,
+        bytes[] calldata priceUpdateData
+    ) external {
+        comptroller.updatePrices(priceUpdateData);
+        (uint256 err, ) = liquidateBorrowInternal(
+            borrower,
+            repayAmount,
+            kTokenCollateral
         );
-        uint256 underlyingBalanceBefore = IEIP20(underlying).balanceOf(address(this));
-        uint256 balance = token.balanceOf(address(this));
-        token.transfer(admin, balance);
-
-        require(underlyingBalanceBefore == IEIP20(underlying).balanceOf(address(this)), "underlying balance changed");
+        requireNoError(err, "liquidateBorrow failed");
     }
 
     /**
