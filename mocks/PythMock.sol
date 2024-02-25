@@ -6,7 +6,7 @@ import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 
 error NotImplemented();
 
-contract PythMock is IPyth {
+abstract contract PythMock is IPyth {
     mapping(bytes32 => PythStructs.Price) prices;
 
     constructor(bytes32[] memory tokenIdArr, int64[] memory priceArr) {
